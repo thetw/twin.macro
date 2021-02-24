@@ -162,7 +162,9 @@ const twinMacro = ({ babel: { types: t }, references, state, config }) => {
 
   // Auto add css prop for styled-components
   if (
-    (state.hasTwAttribute || state.hasCssAttribute) &&
+    (state.hasTwAttribute ||
+      state.hasCssAttribute ||
+      state.hasUsedTwInClassName) &&
     configTwin.autoCssProp === true &&
     state.isStyledComponents
   ) {

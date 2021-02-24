@@ -30,6 +30,8 @@ const handleClassNameProperty = ({ path, t, state }) => {
   })
   if (!matched) return
 
+  state.hasUsedTwInClassName = true
+
   // When classes can't be matched we add them back into the className (it exists as a few properties)
   path.node.value.value = mismatched
   path.node.value.extra.rawValue = mismatched
