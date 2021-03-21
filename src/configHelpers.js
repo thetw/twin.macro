@@ -1,6 +1,6 @@
 import { MacroError } from 'babel-plugin-macros'
 import { resolve } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, watch, utimesSync } from 'fs'
 import resolveTailwindConfig from 'tailwindcss/lib/util/resolveConfig'
 import defaultTailwindConfig from 'tailwindcss/stubs/defaultConfig.stub'
 import { configTwinValidators, configDefaultsTwin } from './config/twinConfig'
@@ -20,12 +20,49 @@ const getAllConfigs = config => {
   return [config, ...configs]
 }
 
+const watchedConfigPaths = {}
+
 const getConfigTailwindProperties = (state, config) => {
   const sourceRoot = state.file.opts.sourceRoot || '.'
   const configFile = config && config.config
 
-  const configPath = resolve(sourceRoot, configFile || `./tailwind.config.js`)
+  const configPath = resolve(sourceRoot, configFile || './tailwind.config.js')
   const configExists = existsSync(configPath)
+
+  // TODO: Turn it off
+  // TODO: Testing in more situations
+  // TODO: Try to avoid subsequent updates
+  // TODO: Find where the babel config is at?
+
+  // Watch the tailwind.config.js file for changes
+  if (configExists && !watchedConfigPaths[configPath]) {
+    watchedConfigPaths[configPath] = true
+    watch(configPath, {}, eventType => {
+      if (eventType !== 'change') return
+      // Config file changed so touch the babel config to cause a live reload
+      // TODO: I can also remove the babel config - but how to get the location in each framework?
+      // TODO: Can I get the babel config location from babel?
+      let babelRcPath = resolve(sourceRoot, './.babelrc')
+      if (!existsSync(babelRcPath)) {
+        babelRcPath = resolve(sourceRoot, './.babelrc.js')
+      }
+
+      if (!existsSync(babelRcPath)) return
+
+      try {
+        console.log('Attempting to cause a page reload...')
+        const time = new Date()
+        utimesSync(babelRcPath, time, time)
+      } catch (_) {
+        // Ignore if we don't have permissions to touch the file
+      }
+    })
+  }
+
+  // Remove the config file from the require cache
+  // to ensure we get its current contents
+  /* eslint-disable-next-line @typescript-eslint/no-dynamic-delete */
+  delete require.cache[configPath]
 
   const configTailwind = configExists
     ? resolveTailwindConfig([...getAllConfigs(require(configPath))])
