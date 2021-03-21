@@ -74,7 +74,7 @@ export default (
 
   // Merge styles into a single css object
   const styles = classes.reduce((results, classNameRaw) => {
-    const pieces = getPieces({ classNameRaw, state })
+    let pieces = getPieces({ classNameRaw, state })
     const { hasPrefix, className, hasVariants } = pieces
 
     // Avoid prechecks on silent mode as they'll error loudly
@@ -136,13 +136,18 @@ export default (
 
     let style
 
-    if (hasUserPlugins) {
-      style = applyTransforms({
-        type,
-        pieces,
-        style: styleHandler.userPlugin(),
-      })
-    }
+    // if (hasUserPlugins) {
+    //   const result = applyTransforms({
+    //     type,
+    //     pieces,
+    //     state,
+    //     style: styleHandler.userPlugin(),
+    //   })
+
+    //   console.log({ result })
+    //   if (result && result.style) style = result.style
+    //   if (result && result.pieces) pieces = result.pieces
+    // }
 
     // Check again there are no userPlugin matches
     if (silentMismatches && !hasMatches && !style) {
@@ -154,8 +159,16 @@ export default (
       errorSuggestions({ pieces, state, isCsOnly })
     )
 
-    style =
-      style || applyTransforms({ type, pieces, style: styleHandler[type]() })
+    // if (!style) {
+    //   const result = applyTransforms({
+    //     type,
+    //     pieces,
+    //     state,
+    //     style: styleHandler[type](),
+    //   })
+    //   if (result && result.style) style = result.style
+    //   if (result && result.pieces) pieces = result.pieces
+    // }
 
     const result = deepMerge(
       results,
