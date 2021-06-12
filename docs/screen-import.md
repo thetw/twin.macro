@@ -8,10 +8,7 @@ The screen import creates media queries for custom css that sync with your tailw
 import tw, { screen, css } from 'twin.macro'
 
 const styles = [
-  // Add styles with object syntax
   screen`sm`({ display: 'block', ...tw`inline` }),
-  // Or add styles with template literals
-  screen`md``display: block; ${css(tw`inline`)}`,
 ]
 
 <div css={styles} />
@@ -23,10 +20,7 @@ const styles = [
 import tw, { styled, screen, css } from 'twin.macro'
 
 const Component = styled.div(() => [
-  // Add styles with object syntax
   screen`sm`({ display: 'block', ...tw`inline` }),
-  // Or add styles with template literals
-  screen`md``display: block; ${css(tw`inline`)}`,
 ])
 
 <Component />
