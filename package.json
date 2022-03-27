@@ -13,11 +13,6 @@
     "fixup": "npm run build && jest --u",
     "prepublishOnly": "npm run build"
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
-  },
   "engines": {
     "node": ">=12.13.0"
   },
