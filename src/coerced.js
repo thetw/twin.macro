@@ -42,8 +42,8 @@ const coercedTypeMap = {
   },
   color: ({ config, value, pieces, forceReturn }) => {
     const { property, variable, wrapWith } = config
-    if (typeof config === 'function')
-      return config(value, {
+    if (typeof config.output === 'function')
+      return config.output(value, {
         withAlpha: alpha({ pieces, property, variable }),
       })
 
@@ -82,14 +82,14 @@ const coercedTypeMap = {
 
     return deepMerge(...result)
   },
-  'line-width': ({ config, value, theme }) => {
+  'line-width': ({ config, value, theme, forceReturn }) => {
     if (typeof config === 'function') return config(value, theme)
-    if (!lineWidth) return
+    if (!forceReturn && !lineWidth) return
     return { [config.property]: value }
   },
-  length: ({ config, value, theme }) => {
+  length: ({ config, value, theme, forceReturn }) => {
     if (typeof config === 'function') return config(value, theme)
-    if (!length(value) && !value.startsWith('var(')) return
+    if (!forceReturn && !length(value) && !value.startsWith('var(')) return
 
     const { property, variable, wrapWith } = config
     if (!property) return
@@ -110,46 +110,46 @@ const coercedTypeMap = {
 
     return resultWithVariable
   },
-  number: ({ config, value }) => {
-    if (!number(value)) return
+  number: ({ config, value, forceReturn }) => {
+    if (!forceReturn && !number(value)) return
     return { [config.property]: value }
   },
-  'absolute-size': ({ config, value }) => {
-    if (!absoluteSize(value)) return
+  'absolute-size': ({ config, value, forceReturn }) => {
+    if (!forceReturn && !absoluteSize(value)) return
     return { [config.property]: value }
   },
-  'relative-size': ({ config, value }) => {
-    if (!relativeSize(value)) return
+  'relative-size': ({ config, value, forceReturn }) => {
+    if (!forceReturn && !relativeSize(value)) return
     return { [config.property]: value }
   },
-  percentage: ({ config, value }) => {
-    if (!percentage(value)) return
+  percentage: ({ config, value, forceReturn }) => {
+    if (!forceReturn && !percentage(value)) return
     return { [config.property]: value }
   },
-  image: ({ value, config }) => {
-    if (!image(value)) return
+  image: ({ value, config, forceReturn }) => {
+    if (!forceReturn && !image(value)) return
     return { [config.property]: value }
   },
-  url: ({ value, config }) => {
-    if (!url(value)) return
+  url: ({ value, config, forceReturn }) => {
+    if (!forceReturn && !url(value)) return
     return { [config.property]: value }
   },
-  position: ({ value, config }) => {
-    if (!position(value)) return
+  position: ({ value, config, forceReturn }) => {
+    if (!forceReturn && !position(value)) return
     return { [config.property]: value }
   },
-  shadow: ({ value, pieces }) => {
-    if (!shadow(value)) return
+  shadow: ({ value, pieces, forceReturn }) => {
+    if (!forceReturn && !shadow(value)) return
     return makeBoxShadow(value, pieces.important)
   },
   lookup: ({ config, value, theme }) =>
     typeof config === 'function' && config(value, theme),
-  'generic-name': ({ value, config }) => {
-    if (!genericName(value)) return
+  'generic-name': ({ value, config, forceReturn }) => {
+    if (!forceReturn && !genericName(value)) return
     return { [config.property]: value }
   },
-  'family-name': ({ value, config }) => {
-    if (!familyName(value)) return
+  'family-name': ({ value, config, forceReturn }) => {
+    if (!forceReturn && !familyName(value)) return
     return { [config.property]: value }
   },
 }
@@ -183,6 +183,7 @@ const getCoercedValue = (customValue, context) => {
     value,
     pieces: context.pieces,
     theme: getTheme(context.state.config.theme),
+    forceReturn: true,
   })
 
   // Return coerced values even when they aren't validated
@@ -194,46 +195,26 @@ const getCoercedValue = (customValue, context) => {
   return result
 }
 
-const getCoercedColor = ({
-  pieces,
-  theme,
-  config,
-  matchConfig,
-}) => configKey => {
-  if (!config) return
+const getCoerced = ({ pieces, theme, config, matchConfig }) => type => {
+  const coercedConfig = config && config[type]
+  if (!coercedConfig) return
 
-  // Match config including a custom slash alpha, eg: bg-black/[.5]
-  const keys = Array.isArray(configKey) ? configKey : [configKey]
-  let value
-  keys.find(k => {
-    const match = matchConfig(k.config || k.property || k)
-    if (match) value = match
-    return match
-  })
+  const value = matchConfig(
+    coercedConfig.config || coercedConfig.property || coercedConfig
+  )
   if (!value) return
-  return coercedTypeMap.color({
+
+  throwIf(!['color', 'any'].includes(type) && pieces.hasAlpha, () =>
+    opacityErrorNotFound({ className: pieces.classNameRaw })
+  )
+
+  return coercedTypeMap[type]({
     value,
-    config,
+    config: coercedConfig,
     pieces,
     theme,
     forceReturn: true,
   })
 }
 
-const getCoercedLength = ({
-  pieces,
-  theme,
-  config,
-  matchConfig,
-}) => configKey => {
-  const value = matchConfig(configKey.config || configKey.property || configKey)
-  if (!value) return
-
-  throwIf(pieces.hasAlpha, () =>
-    opacityErrorNotFound({ className: pieces.classNameRaw })
-  )
-
-  return coercedTypeMap.length({ value, config, pieces, theme })
-}
-
-export { coercedTypeMap, getCoercedValue, getCoercedColor, getCoercedLength }
+export { coercedTypeMap, getCoercedValue, getCoerced }
