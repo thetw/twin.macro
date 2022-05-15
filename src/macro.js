@@ -62,7 +62,14 @@ const macroTasks = [
   addCssImport, // Gotcha: Must be after addStyledImport or issues with theme`` style transpile
 ]
 
-const twinMacro = ({ babel: { types: t }, references, state, config }) => {
+const twinMacro = args => {
+  const {
+    babel: { types: t },
+    references,
+    state,
+    config,
+  } = args
+
   validateImports(references)
 
   const program = state.file.path
@@ -98,7 +105,7 @@ const twinMacro = ({ babel: { types: t }, references, state, config }) => {
   state.tailwindConfigIdentifier = generateUid('tailwindConfig', program)
   state.tailwindUtilsIdentifier = generateUid('tailwindUtils', program)
 
-  state.userPluginData = getUserPluginData({ config: state.config })
+  state.userPluginData = getUserPluginData({ config: state.config, configTwin })
   isDev &&
     Boolean(config.debugPlugins) &&
     state.userPluginData &&
@@ -145,16 +152,7 @@ const twinMacro = ({ babel: { types: t }, references, state, config }) => {
     state.cssIdentifier = generateUid('css', program)
 
   for (const task of macroTasks) {
-    task({
-      styledImport,
-      cssImport,
-      configTwin,
-      references,
-      program,
-      config,
-      state,
-      t,
-    })
+    task({ styledImport, cssImport, references, program, config, state, t })
   }
 
   program.scope.crawl()

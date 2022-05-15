@@ -1,1651 +1,1266 @@
-function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
-
-var babylon = _interopDefault(require('@babel/parser'));
-var get = _interopDefault(require('lodash.get'));
-var color = require('tailwindcss/lib/util/color');
-var chalk = _interopDefault(require('chalk'));
+var babelPluginMacros = require('babel-plugin-macros');
+var babylon = require('@babel/parser');
+var color$1 = require('tailwindcss/lib/util/color');
+var deepMerge = require('lodash.merge');
+var get = require('lodash.get');
+var dataTypes = require('tailwindcss/lib/util/dataTypes');
+var stringSimilarity = require('string-similarity');
+var chalk = require('chalk');
 var path = require('path');
 var fs = require('fs');
-var resolveTailwindConfig = _interopDefault(require('tailwindcss/lib/util/resolveConfig'));
-var defaultTailwindConfig = _interopDefault(require('tailwindcss/stubs/defaultConfig.stub'));
-var flatMap = _interopDefault(require('lodash.flatmap'));
-var template = _interopDefault(require('@babel/template'));
+var resolveTailwindConfig = require('tailwindcss/lib/util/resolveConfig');
+var defaultTailwindConfig = require('tailwindcss/stubs/defaultConfig.stub');
+var flatMap = require('lodash.flatmap');
+var template = require('@babel/template');
+var timSort = require('timsort');
+var cleanSet = require('clean-set');
 var parseBoxShadowValue = require('tailwindcss/lib/util/parseBoxShadowValue');
-var cleanSet = _interopDefault(require('clean-set'));
-var timSort = _interopDefault(require('timsort'));
-var babelPluginMacros = require('babel-plugin-macros');
-var dataTypes = require('tailwindcss/lib/util/dataTypes');
-var stringSimilarity = _interopDefault(require('string-similarity'));
-var postcss = _interopDefault(require('postcss'));
-var util = _interopDefault(require('util'));
-var transformThemeValue = _interopDefault(require('tailwindcss/lib/util/transformThemeValue'));
-var parseObjectStyles = _interopDefault(require('tailwindcss/lib/util/parseObjectStyles'));
-var isPlainObject = _interopDefault(require('tailwindcss/lib/util/isPlainObject'));
+var postcss = require('postcss');
+var require$$0 = require('util');
+var transformThemeValue$1 = require('tailwindcss/lib/util/transformThemeValue');
+var parseObjectStyles = require('tailwindcss/lib/util/parseObjectStyles');
+var isPlainObject = require('tailwindcss/lib/util/isPlainObject');
 var toPath = require('tailwindcss/lib/util/toPath');
-var deepMerge = _interopDefault(require('lodash.merge'));
 
-var SPACE_ID = '__SPACE_ID__';
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
 
-var throwIf = function (expression, callBack) {
-  if (!expression) { return; }
+var babylon__default = /*#__PURE__*/_interopDefaultLegacy(babylon);
+var deepMerge__default = /*#__PURE__*/_interopDefaultLegacy(deepMerge);
+var get__default = /*#__PURE__*/_interopDefaultLegacy(get);
+var stringSimilarity__default = /*#__PURE__*/_interopDefaultLegacy(stringSimilarity);
+var chalk__default = /*#__PURE__*/_interopDefaultLegacy(chalk);
+var resolveTailwindConfig__default = /*#__PURE__*/_interopDefaultLegacy(resolveTailwindConfig);
+var defaultTailwindConfig__default = /*#__PURE__*/_interopDefaultLegacy(defaultTailwindConfig);
+var flatMap__default = /*#__PURE__*/_interopDefaultLegacy(flatMap);
+var template__default = /*#__PURE__*/_interopDefaultLegacy(template);
+var timSort__default = /*#__PURE__*/_interopDefaultLegacy(timSort);
+var cleanSet__default = /*#__PURE__*/_interopDefaultLegacy(cleanSet);
+var postcss__default = /*#__PURE__*/_interopDefaultLegacy(postcss);
+var require$$0__default = /*#__PURE__*/_interopDefaultLegacy(require$$0);
+var transformThemeValue__default = /*#__PURE__*/_interopDefaultLegacy(transformThemeValue$1);
+var parseObjectStyles__default = /*#__PURE__*/_interopDefaultLegacy(parseObjectStyles);
+var isPlainObject__default = /*#__PURE__*/_interopDefaultLegacy(isPlainObject);
+
+const SPACE_ID = '__SPACE_ID__';
+
+const throwIf = (expression, callBack) => {
+  if (!expression) return;
   throw new babelPluginMacros.MacroError(callBack());
 };
 
-var isEmpty = function (value) { return value === undefined || value === null || typeof value === 'object' && Object.keys(value).length === 0 || typeof value === 'string' && value.trim().length === 0; };
+const isEmpty$1 = value => value === undefined || value === null || typeof value === 'object' && Object.keys(value).length === 0 || typeof value === 'string' && value.trim().length === 0;
 
-var addPxTo0 = function (string) { return Number(string) === 0 ? (string + "px") : string; };
-
-function transformThemeValue$1(themeSection) {
+function transformThemeValue(themeSection) {
   if (['fontSize', 'outline'].includes(themeSection)) {
-    return function (value) { return Array.isArray(value) ? value[0] : value; };
+    return value => Array.isArray(value) ? value[0] : value;
   }
 
   if (['fontFamily', 'boxShadow', 'transitionProperty', 'transitionDuration', 'transitionDelay', 'transitionTimingFunction', 'backgroundImage', 'backgroundSize', 'backgroundColor', 'cursor', 'animation'].includes(themeSection)) {
-    return function (value) { return Array.isArray(value) ? value.join(', ') : value; };
+    return value => Array.isArray(value) ? value.join(', ') : value;
   }
 
   if (themeSection === 'colors') {
-    return function (value) { return typeof value === 'function' ? value({}) : value; };
+    return value => typeof value === 'function' ? value({}) : value;
   }
 
-  return function (value) { return value; };
+  return value => value;
 }
 
-var objectToStringValues = function (obj) {
-  if (typeof obj === 'object' && !Array.isArray(obj)) { return Object.entries(obj).reduce(function (result, ref) {
-    var obj;
-
-    var key = ref[0];
-    var value = ref[1];
-    return deepMerge(result, ( obj = {}, obj[key] = objectToStringValues(value), obj ));
-    }, {}); }
-  if (Array.isArray(obj)) { return obj.map(function (i) { return objectToStringValues(i); }); }
-  if (typeof obj === 'number') { return String(obj); } // typeof obj = string / function
+const objectToStringValues = obj => {
+  if (typeof obj === 'object' && !Array.isArray(obj)) return Object.entries(obj).reduce((result, [key, value]) => deepMerge__default["default"](result, {
+    [key]: objectToStringValues(value)
+  }), {});
+  if (Array.isArray(obj)) return obj.map(i => objectToStringValues(i));
+  if (typeof obj === 'number') return String(obj); // typeof obj = string / function
 
   return obj;
 };
 
-var getTheme = function (configTheme) { return function (grab) {
-  if (!grab) { return configTheme; } // Allow theme`` which gets supplied as an array
+const getTheme = configTheme => grab => {
+  if (!grab) return configTheme; // Allow theme`` which gets supplied as an array
 
-  var value = Array.isArray(grab) ? grab[0] : grab; // Get the theme key so we can apply certain rules in transformThemeValue
+  const value = Array.isArray(grab) ? grab[0] : grab; // Get the theme key so we can apply certain rules in transformThemeValue
 
-  var themeKey = value.split('.')[0]; // Get the resulting value from the config
+  const themeKey = value.split('.')[0]; // Get the resulting value from the config
 
-  var themeValue = get(configTheme, value);
-  return objectToStringValues(transformThemeValue$1(themeKey)(themeValue));
-}; };
+  const themeValue = get__default["default"](configTheme, value);
+  return objectToStringValues(transformThemeValue(themeKey)(themeValue));
+};
 
-var stripNegative = function (string) { return string && string.length > 1 && string.slice(0, 1) === '-' ? string.slice(1, string.length) : string; };
+const stripNegative = string => string && string.length > 1 && string.slice(0, 1) === '-' ? string.slice(1, string.length) : string;
 
-var camelize = function (string) { return string && string.replace(/\W+(.)/g, function (_, chr) { return chr.toUpperCase(); }); };
+const camelize = string => string && string.replace(/\W+(.)/g, (_, chr) => chr.toUpperCase());
 
-var isNumeric = function (str) {
+const isNumeric = str => {
   /* eslint-disable-next-line eqeqeq */
-  if (typeof str != 'string') { return false; }
+  if (typeof str != 'string') return false;
   return !Number.isNaN(str) && !Number.isNaN(Number.parseFloat(str));
 };
 
-var isClass = function (str) { return new RegExp(/(\s*\.|{{)\w/).test(str); };
+const isClass = str => new RegExp(/(\s*\.|{{)\w/).test(str);
 
-var isMediaQuery = function (str) { return str.startsWith('@media'); };
+const isMediaQuery = str => str.startsWith('@media');
 
-var isShortCss = function (className) { return new RegExp(/[^/-]\[/).test(className); };
+const isShortCss = className => new RegExp(/[^/-]\[/).test(className);
 
-var isArbitraryCss = function (className) { return new RegExp(/-\[/).test(className); }; // Split a string at a value
+const isArbitraryCss = className => new RegExp(/-\[/).test(className); // Split a string at a value
 
 
 function splitOnFirst(input, delim) {
-  return (function (ref) {
-    var first = ref[0];
-    var rest = ref.slice(1);
-
-    return [first, rest.join(delim)];
-  })(input.split(delim));
+  return (([first, ...rest]) => [first, rest.join(delim)])(input.split(delim));
 }
 
-var formatProp = function (classes) { return classes // Replace the "stand-in spaces" with real ones
-.replace(new RegExp(SPACE_ID, 'g'), ' ') // Normalize spacing
+const formatProp = classes => replaceSpaceId(classes // Normalize spacing
 .replace(/\s\s+/g, ' ') // Remove newline characters
-.replace(/\n/g, ' ').trim(); };
+.replace(/\n/g, ' ').trim());
 
-var buildStyleSet = function (property, color$$1, pieces) {
-  var obj;
-
-  var value = "" + color$$1 + (pieces.important);
-  if (!property) { return value; }
-  return ( obj = {}, obj[property] = value, obj );
+const isSpaceSeparatedColor = color => {
+  const spaceMatch = typeof color === 'string' ? color.split(/\s+(?=[^)\]}]*(?:[([{]|$))/) : [];
+  if (spaceMatch.length === 0) return;
+  const hasValidSpaceSeparatedColors = spaceMatch.every(color => // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-regexp-test
+  Boolean(/^var\(--\w*\)$/.exec(color) ? color : color$1.parseColor(color)));
+  return hasValidSpaceSeparatedColors;
 };
 
-var withAlpha = function (ref) {
-  var obj, obj$1;
+const isObject = val => // eslint-disable-next-line eqeqeq, no-eq-null, @typescript-eslint/no-unnecessary-boolean-literal-compare
+val != null && typeof val === 'object' && Array.isArray(val) === false;
 
-  var color$$1 = ref.color;
-  var property = ref.property;
-  var variable = ref.variable;
-  var pieces = ref.pieces; if ( pieces === void 0 ) pieces = {};
-  var fallBackColor = ref.fallBackColor;
-  if (!color$$1) { return; }
-  if (Array.isArray(color$$1)) { color$$1 = color$$1.join(','); }
+const getFirstValue = (list, getValue) => {
+  let firstValue;
+  const listLength = list.length - 1;
+  const listItem = list.find((listItem, index) => {
+    const isLast = index === listLength;
+    firstValue = getValue(listItem, {
+      index,
+      isLast
+    });
+    return Boolean(firstValue);
+  });
+  return [firstValue, listItem];
+};
 
-  if (typeof color$$1 === 'function') {
-    if (variable && property) {
-      if (pieces.hasAlpha) { return buildStyleSet(property, color$$1({
-        opacityValue: pieces.alpha
-      }), pieces); }
-      return ( obj = {}, obj[variable] = '1', obj[property] = ("" + (color$$1({
-          opacityVariable: variable,
-          opacityValue: ("var(" + variable + ")")
-        })) + (pieces.important)), obj );
+const replaceSpaceId = className => className.replace(new RegExp(SPACE_ID, 'g'), ' ');
+
+const toArray = arr => Array.isArray(arr) ? arr : [arr];
+
+const formatCssProperty = string => {
+  // https://stackoverflow.com/questions/448981/which-characters-are-valid-in-css-class-names-selectors
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-regexp-test
+  if (string && string.match(/^-{2,3}[_a-z]+[\w-]*/i)) return string;
+  return camelize(string);
+};
+
+function _extends() {
+  _extends = Object.assign || function (target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = arguments[i];
+
+      for (var key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
+          target[key] = source[key];
+        }
+      }
     }
 
-    color$$1 = color$$1({
+    return target;
+  };
+
+  return _extends.apply(this, arguments);
+}
+
+function _objectWithoutPropertiesLoose(source, excluded) {
+  if (source == null) return {};
+  var target = {};
+  var sourceKeys = Object.keys(source);
+  var key, i;
+
+  for (i = 0; i < sourceKeys.length; i++) {
+    key = sourceKeys[i];
+    if (excluded.indexOf(key) >= 0) continue;
+    target[key] = source[key];
+  }
+
+  return target;
+}
+
+const buildStyleSet = (property, color, pieces) => {
+  const value = `${color}${pieces.important}`;
+  if (!property) return value;
+  return {
+    [property]: value
+  };
+};
+
+const maybeAddAlpha = (value, {
+  pieces,
+  variable = ''
+}) => typeof value === 'function' || pieces.alpha && typeof value === 'string' && dataTypes.color(value) ? toAlpha({
+  pieces,
+  variable,
+  property: undefined
+})(value, pieces.alpha, value) : value;
+
+const toAlpha = ({
+  pieces,
+  property,
+  variable
+}) => (color, alpha, fallBackColor) => {
+  const newPieces = pieces.hasVariantVisited && _extends({}, pieces, {
+    alpha: '',
+    hasAlpha: false
+  }) || alpha && _extends({}, pieces, {
+    alpha,
+    hasAlpha: true
+  }) || pieces;
+  return withAlpha(_extends({
+    color,
+    property
+  }, !pieces.hasVariantVisited && {
+    variable
+  }, {
+    pieces: newPieces,
+    fallBackColor
+  }));
+};
+
+const withAlpha = ({
+  color,
+  property,
+  variable,
+  pieces = {
+    hasAlpha: false,
+    alpha: '',
+    important: ''
+  },
+  fallBackColor = false
+}) => {
+  if (!color) return;
+  if (Array.isArray(color)) color = color.join(',');
+
+  if (typeof color === 'function') {
+    if (variable && property) {
+      if (pieces.hasAlpha) return buildStyleSet(property, color({
+        opacityValue: pieces.alpha
+      }), pieces);
+      return {
+        [variable]: '1',
+        [property]: `${color({
+          opacityVariable: variable,
+          opacityValue: `var(${variable})`
+        })}${pieces.important}`
+      };
+    }
+
+    color = color({
       opacityVariable: variable
     });
   }
 
-  var parsed = color.parseColor(color$$1);
+  const parsed = color$1.parseColor(color);
 
   if (parsed === null) {
-    // Check for space separated color values
-    var spaceMatch = typeof color$$1 === 'string' ? color$$1.split(/\s+(?=[^)\]}]*(?:[([{]|$))/) : [];
-
-    if (spaceMatch.length > 1) {
-      var hasValidSpaceSeparatedColors = spaceMatch.every(function (color$$1) { return Boolean(/^var\(--\w*\)$/.exec(color$$1) ? color$$1 : color.parseColor(color$$1)); });
-      if (!hasValidSpaceSeparatedColors) { return; }
-      return buildStyleSet(property, color$$1, pieces);
-    }
-
-    if (dataTypes.gradient(color$$1)) { return buildStyleSet(property, color$$1, pieces); }
-    if (fallBackColor) { return buildStyleSet(property, fallBackColor, pieces); }
+    // next-line: "!fallBackColor" is a workaround for variables used within these classes:
+    // from-[var(--color)] + via-[var(--color)]
+    const hasValidSpaceSeparatedColors = !fallBackColor && isSpaceSeparatedColor(color);
+    if (hasValidSpaceSeparatedColors) return buildStyleSet(property, color, pieces);
+    if (dataTypes.gradient(color)) return buildStyleSet(property, color, pieces);
+    if (fallBackColor) return buildStyleSet(property, fallBackColor, pieces);
     return;
   }
 
   if (parsed.alpha !== undefined) {
     // For gradients
-    if (color$$1 === 'transparent' && fallBackColor) { return buildStyleSet(property, color.formatColor(Object.assign({}, parsed,
-      {alpha: pieces.alpha})), pieces); } // Has an alpha value, return color as-is
+    if (color === 'transparent' && fallBackColor) return buildStyleSet(property, pieces.alpha ? color$1.formatColor(_extends({}, parsed, {
+      alpha: pieces.alpha
+    })) : color, pieces); // Has an alpha value, return color as-is
 
-    return buildStyleSet(property, color$$1, pieces);
+    return buildStyleSet(property, color, pieces);
   }
 
-  if (pieces.alpha) { return buildStyleSet(property, color.formatColor(Object.assign({}, parsed,
-    {alpha: pieces.alpha})), pieces); }
-  if (variable) { return ( obj$1 = {}, obj$1[variable] = '1', obj$1[property] = ("" + (color.formatColor(Object.assign({}, parsed,
-      {alpha: ("var(" + variable + ")")}))) + (pieces.important)), obj$1 ); }
-  return buildStyleSet(property, color$$1, pieces);
+  if (pieces.alpha) return buildStyleSet(property, color$1.formatColor(_extends({}, parsed, {
+    alpha: pieces.alpha
+  })), pieces);
+  if (variable) return {
+    [variable]: '1',
+    [property]: `${color$1.formatColor(_extends({}, parsed, {
+      alpha: `var(${variable})`
+    }))}${pieces.important}`
+  };
+  return buildStyleSet(property, color, pieces);
 };
 
-var dynamicStyles = {
-  /**
-   * ===========================================
-   * Layout
-   */
-  // https://tailwindcss.com/docs/animation
-  animate: {
-    prop: 'animation',
-    plugin: 'animation'
-  },
-  // https://tailwindcss.com/docs/container
-  container: {
-    hasArbitrary: false,
-    plugin: 'container'
-  },
-  // https://tailwindcss.com/docs/columns
-  columns: {
-    prop: 'columns',
-    config: 'columns'
-  },
-  // https://tailwindcss.com/docs/just-in-time-mode#content-utilities
-  content: {
-    config: 'content',
-    value: function (ref) {
-      var value = ref.value;
-      var isEmotion = ref.isEmotion;
+const addDataTwPropToPath = ({
+  t,
+  attributes,
+  rawClasses,
+  path,
+  state,
+  propName = 'data-tw'
+}) => {
+  const dataTwPropAllEnvironments = propName === 'data-tw' && state.configTwin.dataTwProp === 'all';
+  const dataCsPropAllEnvironments = propName === 'data-cs' && state.configTwin.dataCsProp === 'all';
+  if (state.isProd && !dataTwPropAllEnvironments && !dataCsPropAllEnvironments) return;
+  if (propName === 'data-tw' && !state.configTwin.dataTwProp) return;
+  if (propName === 'data-cs' && !state.configTwin.dataCsProp) return; // Remove the existing debug attribute if you happen to have it
 
-      // Temp fix until emotion supports css variables with the content property
-      if (isEmotion) { return {
-        content: value
-      }; }
-      return {
-        '--tw-content': value,
-        content: 'var(--tw-content)'
-      };
-    }
-  },
-  // https://tailwindcss.com/docs/just-in-time-mode#caret-color-utilities
-  caret: {
-    plugin: 'caretColor',
-    value: ['color', 'any'],
-    coerced: {
-      color: {
-        property: 'caretColor'
-      },
-      any: {
-        property: 'caretColor'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/box-sizing
-  // https://tailwindcss.com/docs/display
-  // https://tailwindcss.com/docs/float
-  // https://tailwindcss.com/docs/clear
-  // https://tailwindcss.com/docs/object-fit
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/object-position
-  object: {
-    prop: 'objectPosition',
-    config: 'objectPosition'
-  },
-  // https://tailwindcss.com/docs/overflow
-  // https://tailwindcss.com/docs/position
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/top-right-bottom-left
-  top: {
-    prop: 'top',
-    config: 'inset'
-  },
-  bottom: {
-    prop: 'bottom',
-    config: 'inset'
-  },
-  right: {
-    prop: 'right',
-    config: 'inset'
-  },
-  left: {
-    prop: 'left',
-    config: 'inset'
-  },
-  'inset-y': {
-    prop: ['top', 'bottom'],
-    config: 'inset'
-  },
-  'inset-x': {
-    prop: ['left', 'right'],
-    config: 'inset'
-  },
-  inset: {
-    prop: ['top', 'right', 'bottom', 'left'],
-    config: 'inset'
-  },
-  // https://tailwindcss.com/docs/visibility
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/z-index
-  z: {
-    prop: 'zIndex',
-    config: 'zIndex'
-  },
-  // https://tailwindcss.com/docs/space
-  // space-x-reverse + space-y-reverse are in staticStyles
-  'space-y': {
-    plugin: 'space',
-    value: function (ref) {
-      var value = ref.value;
+  const dataProperty = attributes.filter(p => p.node && p.node.name && p.node.name.name === propName); // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-      return ({
-      '> :not([hidden]) ~ :not([hidden])': {
-        '--tw-space-y-reverse': '0',
-        marginTop: ("calc(" + value + " * calc(1 - var(--tw-space-y-reverse)))"),
-        marginBottom: ("calc(" + value + " * var(--tw-space-y-reverse))")
-      }
-    });
-}
-  },
-  'space-x': {
-    plugin: 'space',
-    value: function (ref) {
-      var value = ref.value;
+  dataProperty.forEach(path => path.remove());
+  const classes = formatProp(rawClasses); // Add the attribute
 
-      return ({
-      '> :not([hidden]) ~ :not([hidden])': {
-        '--tw-space-x-reverse': '0',
-        marginRight: ("calc(" + value + " * var(--tw-space-x-reverse))"),
-        marginLeft: ("calc(" + value + " * calc(1 - var(--tw-space-x-reverse)))")
-      }
-    });
-}
-  },
-  // https://tailwindcss.com/docs/divide-width/
-  'divide-opacity': {
-    prop: '--tw-divide-opacity',
-    plugin: 'divide'
-  },
-  'divide-y': {
-    plugin: 'divide',
-    value: ['line-width', 'length'],
-    coerced: {
-      'line-width': function (value) { return ({
-        '> :not([hidden]) ~ :not([hidden])': {
-          '--tw-divide-y-reverse': '0',
-          borderTopWidth: ("calc(" + value + " * calc(1 - var(--tw-divide-y-reverse)))"),
-          borderBottomWidth: ("calc(" + value + " * var(--tw-divide-y-reverse))")
-        }
-      }); },
-      length: function (value) { return ({
-        '> :not([hidden]) ~ :not([hidden])': {
-          '--tw-divide-y-reverse': '0',
-          borderTopWidth: ("calc(" + value + " * calc(1 - var(--tw-divide-y-reverse)))"),
-          borderBottomWidth: ("calc(" + value + " * var(--tw-divide-y-reverse))")
-        }
-      }); }
-    }
-  },
-  'divide-x': {
-    plugin: 'divide',
-    value: ['line-width', 'length'],
-    coerced: {
-      'line-width': function (value) { return ({
-        '> :not([hidden]) ~ :not([hidden])': {
-          '--tw-divide-x-reverse': '0',
-          borderRightWidth: ("calc(" + value + " * var(--tw-divide-x-reverse))"),
-          borderLeftWidth: ("calc(" + value + " * calc(1 - var(--tw-divide-x-reverse)))")
-        }
-      }); },
-      length: function (value) { return ({
-        '> :not([hidden]) ~ :not([hidden])': {
-          '--tw-divide-x-reverse': '0',
-          borderRightWidth: ("calc(" + value + " * var(--tw-divide-x-reverse))"),
-          borderLeftWidth: ("calc(" + value + " * calc(1 - var(--tw-divide-x-reverse)))")
-        }
-      }); }
-    }
-  },
-  divide: {
-    plugin: 'divide',
-    value: ['color'],
-    coerced: {
-      color: {
-        property: 'borderColor',
-        variable: '--tw-divide-opacity',
-        wrapWith: '> :not([hidden]) ~ :not([hidden])'
-      }
-    }
-  },
+  path.insertAfter(t.jsxAttribute(t.jsxIdentifier(propName), t.stringLiteral(classes)));
+};
 
-  /**
-   * ===========================================
-   * Flexbox
-   */
-  // https://tailwindcss.com/docs/flex-basis
-  basis: {
-    prop: 'flexBasis',
-    config: 'flexBasis'
-  },
-  // https://tailwindcss.com/docs/flex-direction
-  // https://tailwindcss.com/docs/flex-wrap
-  // https://tailwindcss.com/docs/flex
-  flex: {
-    prop: 'flex',
-    config: 'flex'
-  },
-  // https://tailwindcss.com/docs/flex-grow
-  'flex-grow': {
-    prop: 'flexGrow',
-    config: 'flexGrow'
-  },
-  grow: {
-    prop: 'flexGrow',
-    config: 'flexGrow'
-  },
-  // https://tailwindcss.com/docs/flex-shrink
-  shrink: {
-    prop: 'flexShrink',
-    config: 'flexShrink'
-  },
-  'flex-shrink': {
-    prop: 'flexShrink',
-    config: 'flexShrink'
-  },
-  // https://tailwindcss.com/docs/order
-  order: {
-    prop: 'order',
-    config: 'order'
-  },
+const addDataPropToExistingPath = ({
+  t,
+  attributes,
+  rawClasses,
+  path,
+  state,
+  propName = 'data-tw'
+}) => {
+  const dataTwPropAllEnvironments = propName === 'data-tw' && state.configTwin.dataTwProp === 'all';
+  const dataCsPropAllEnvironments = propName === 'data-cs' && state.configTwin.dataCsProp === 'all';
+  if (state.isProd && !dataTwPropAllEnvironments && !dataCsPropAllEnvironments) return;
+  if (propName === 'data-tw' && !state.configTwin.dataTwProp) return;
+  if (propName === 'data-cs' && !state.configTwin.dataCsProp) return; // Append to the existing debug attribute
 
-  /**
-   * ===========================================
-   * Grid
-   */
-  // https://tailwindcss.com/docs/grid-template-columns
-  'grid-cols': {
-    prop: 'gridTemplateColumns',
-    config: 'gridTemplateColumns'
-  },
-  // https://tailwindcss.com/docs/grid-column
-  col: {
-    prop: 'gridColumn',
-    config: 'gridColumn'
-  },
-  'col-start': {
-    prop: 'gridColumnStart',
-    config: 'gridColumnStart'
-  },
-  'col-end': {
-    prop: 'gridColumnEnd',
-    config: 'gridColumnEnd'
-  },
-  // https://tailwindcss.com/docs/grid-template-rows
-  'grid-rows': {
-    prop: 'gridTemplateRows',
-    config: 'gridTemplateRows'
-  },
-  // https://tailwindcss.com/docs/grid-row
-  // TODO
-  // https://tailwindcss.com/docs/grid-row
-  row: {
-    prop: 'gridRow',
-    config: 'gridRow'
-  },
-  'row-start': {
-    prop: 'gridRowStart',
-    config: 'gridRowStart'
-  },
-  'row-end': {
-    prop: 'gridRowEnd',
-    config: 'gridRowEnd'
-  },
-  // https://tailwindcss.com/docs/grid-auto-columns
-  'auto-cols': {
-    prop: 'gridAutoColumns',
-    config: 'gridAutoColumns'
-  },
-  // https://tailwindcss.com/docs/grid-auto-rows
-  'auto-rows': {
-    prop: 'gridAutoRows',
-    config: 'gridAutoRows'
-  },
-  // https://tailwindcss.com/docs/gap
-  gap: {
-    prop: 'gap',
-    config: 'gap'
-  },
-  'gap-x': {
-    prop: 'columnGap',
-    config: 'gap',
-    configFallback: 'spacing'
-  },
-  'gap-y': {
-    prop: 'rowGap',
-    config: 'gap',
-    configFallback: 'spacing'
-  },
-  // https://tailwindcss.com/docs/align-items
-  // https://tailwindcss.com/docs/align-content
-  // https://tailwindcss.com/docs/align-self
-  // https://tailwindcss.com/docs/justify-content
-  // See staticStyles.js
-  // Deprecated since tailwindcss v1.7.0
-  'col-gap': {
-    hasArbitrary: false,
-    prop: 'columnGap',
-    config: 'gap'
-  },
-  'row-gap': {
-    hasArbitrary: false,
-    prop: 'rowGap',
-    config: 'gap'
-  },
+  const dataProperty = attributes.find(p => p.node && p.node.name && p.node.name.name === propName);
 
-  /**
-   * ===========================================
-   * Spacing
-   */
-  // https://tailwindcss.com/docs/padding
-  pt: {
-    prop: 'paddingTop',
-    config: 'padding'
-  },
-  pr: {
-    prop: 'paddingRight',
-    config: 'padding'
-  },
-  pb: {
-    prop: 'paddingBottom',
-    config: 'padding'
-  },
-  pl: {
-    prop: 'paddingLeft',
-    config: 'padding'
-  },
-  px: {
-    prop: ['paddingLeft', 'paddingRight'],
-    config: 'padding'
-  },
-  py: {
-    prop: ['paddingTop', 'paddingBottom'],
-    config: 'padding'
-  },
-  p: {
-    prop: 'padding',
-    config: 'padding'
-  },
-  // https://tailwindcss.com/docs/margin
-  mt: {
-    prop: 'marginTop',
-    config: 'margin'
-  },
-  mr: {
-    prop: 'marginRight',
-    config: 'margin'
-  },
-  mb: {
-    prop: 'marginBottom',
-    config: 'margin'
-  },
-  ml: {
-    prop: 'marginLeft',
-    config: 'margin'
-  },
-  mx: {
-    prop: ['marginLeft', 'marginRight'],
-    config: 'margin'
-  },
-  my: {
-    prop: ['marginTop', 'marginBottom'],
-    config: 'margin'
-  },
-  m: {
-    prop: 'margin',
-    config: 'margin'
-  },
+  if (dataProperty) {
+    try {
+      // Existing data prop
+      if (dataProperty.node.value.value) {
+        dataProperty.node.value.value = `${[dataProperty.node.value.value, rawClasses].filter(Boolean).join(' | ')}`;
+        return;
+      } // New data prop
 
-  /**
-   * ===========================================
-   * Sizing
-   */
-  // https://tailwindcss.com/docs/width
-  w: {
-    prop: 'width',
-    config: 'width'
-  },
-  // https://tailwindcss.com/docs/min-width
-  'min-w': {
-    prop: 'minWidth',
-    config: 'minWidth'
-  },
-  // https://tailwindcss.com/docs/max-width
-  'max-w': {
-    prop: 'maxWidth',
-    config: 'maxWidth'
-  },
-  // https://tailwindcss.com/docs/height
-  h: {
-    prop: 'height',
-    config: 'height'
-  },
-  // https://tailwindcss.com/docs/min-height
-  'min-h': {
-    prop: 'minHeight',
-    config: 'minHeight'
-  },
-  // https://tailwindcss.com/docs/max-height
-  'max-h': {
-    prop: 'maxHeight',
-    config: 'maxHeight'
-  },
 
-  /**
-   * ===========================================
-   * Typography
-   */
-  font: [// https://tailwindcss.com/docs/font-family
-  {
-    config: 'fontFamily',
-    value: ['generic-name', 'family-name'],
-    prop: 'fontFamily',
-    coerced: {
-      'generic-name': {
-        property: 'fontFamily'
-      },
-      'family-name': {
-        property: 'fontFamily'
-      }
-    }
-  }, // https://tailwindcss.com/docs/font-weight
-  {
-    config: 'fontWeight',
-    value: ['number'],
-    prop: 'fontWeight',
-    coerced: {
-      number: {
-        property: 'fontWeight'
-      }
-    }
-  }],
-  // https://tailwindcss.com/docs/font-smoothing
-  // https://tailwindcss.com/docs/font-style
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/letter-spacing
-  tracking: {
-    prop: 'letterSpacing',
-    config: 'letterSpacing'
-  },
-  // https://tailwindcss.com/docs/line-height
-  leading: {
-    prop: 'lineHeight',
-    config: 'lineHeight'
-  },
-  // https://tailwindcss.com/docs/list-style-type
-  list: {
-    prop: 'listStyleType',
-    config: 'listStyleType'
-  },
-  // https://tailwindcss.com/docs/list-style-position
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/placeholder-opacity
-  'placeholder-opacity': {
-    plugin: 'placeholder',
-    value: function (ref) {
-      var value = ref.value;
+      dataProperty.node.value.expression.value = `${[dataProperty.node.value.expression.value, rawClasses].filter(Boolean).join(' | ')}`;
+    } catch (_) {}
 
-      return ({
-      '::placeholder': {
-        '--tw-placeholder-opacity': value
-      }
-    });
-}
-  },
-  // https://tailwindcss.com/docs/placeholder-color
-  placeholder: {
-    plugin: 'placeholder',
-    value: ['color', 'any'],
-    coerced: {
-      color: {
-        property: 'color',
-        variable: '--tw-placeholder-opacity',
-        wrapWith: '::placeholder'
-      },
-      any: {
-        property: 'color',
-        wrapWith: '::placeholder'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/text-align
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/text-color
-  // https://tailwindcss.com/docs/font-size
-  'text-opacity': {
-    prop: '--tw-text-opacity',
-    config: 'textOpacity',
-    configFallback: 'opacity'
-  },
-  text: {
-    value: ['color', 'absolute-size', 'relative-size', 'length', 'percentage'],
-    plugin: 'text',
-    coerced: {
-      color: {
-        property: 'color',
-        variable: '--tw-text-opacity'
-      },
-      'absolute-size': {
-        property: 'fontSize'
-      },
-      'relative-size': {
-        property: 'fontSize'
-      },
-      length: {
-        property: 'fontSize'
-      },
-      percentage: {
-        property: 'fontSize'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/text-decoration
-  // https://tailwindcss.com/docs/text-transform
-  // https://tailwindcss.com/docs/text-overflow
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/text-indent
-  indent: {
-    prop: 'textIndent',
-    config: 'textIndent',
-    configFallback: 'spacing',
-    value: ['length', 'position'],
-    coerced: {
-      length: {
-        property: 'textIndent'
-      },
-      position: {
-        property: 'textIndent'
-      },
-      lookup: {
-        property: 'textIndent'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/vertical-align
-  // https://tailwindcss.com/docs/whitespace
-  // https://tailwindcss.com/docs/word-break
-  // See staticStyles.js
-
-  /**
-   * ===========================================
-   * Backgrounds
-   */
-  // https://tailwindcss.com/docs/background-attachment
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/background-repeat
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/background-opacity
-  'bg-opacity': {
-    prop: '--tw-bg-opacity',
-    config: 'backgroundOpacity',
-    configFallback: 'opacity'
-  },
-  // https://tailwindcss.com/docs/gradient-color-stops
-  bg: {
-    value: ['color', 'url', 'image', 'position', 'length', 'percentage'],
-    plugin: 'bg',
-    coerced: {
-      color: {
-        property: 'backgroundColor',
-        variable: '--tw-bg-opacity'
-      },
-      url: {
-        property: 'backgroundImage'
-      },
-      image: {
-        property: 'backgroundImage'
-      },
-      position: {
-        property: 'backgroundPosition'
-      },
-      length: {
-        property: 'backgroundSize'
-      },
-      percentage: {
-        property: 'backgroundPosition'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/gradient-color-stops
-  from: {
-    plugin: 'gradient',
-    value: ['color'],
-    coerced: {
-      color: function (value, ref) {
-        var withAlpha = ref.withAlpha;
-
-        return ({
-        '--tw-gradient-from': withAlpha(value) || value,
-        '--tw-gradient-stops': ("var(--tw-gradient-from), var(--tw-gradient-to, " + (withAlpha(value, '0', 'rgb(255 255 255 / 0)') || value) + ")")
-      });
-}
-    }
-  },
-  via: {
-    plugin: 'gradient',
-    value: ['color'],
-    coerced: {
-      color: function (value, ref) {
-        var withAlpha = ref.withAlpha;
-
-        return ({
-        '--tw-gradient-stops': ("var(--tw-gradient-from), " + (withAlpha(value) || value) + ", var(--tw-gradient-to, " + (withAlpha(value, '0', 'rgb(255 255 255 / 0)')) + ")")
-      });
-}
-    }
-  },
-  to: {
-    value: ['color'],
-    plugin: 'gradient',
-    coerced: {
-      color: function (value, ref) {
-        var withAlpha = ref.withAlpha;
-
-        return ({
-        '--tw-gradient-to': ("" + (withAlpha(value) || value))
-      });
-}
-    }
-  },
-
-  /**
-   * ===========================================
-   * Borders
-   */
-  // https://tailwindcss.com/docs/border-style
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/border-width
-  'border-t': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: 'borderTopColor',
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: 'borderTopWidth',
-        config: 'borderWidth'
-      },
-      length: {
-        property: 'borderTopWidth',
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-b': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: 'borderBottomColor',
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: 'borderBottomWidth',
-        config: 'borderWidth'
-      },
-      length: {
-        property: 'borderBottomWidth',
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-l': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: 'borderLeftColor',
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: 'borderLeftWidth',
-        config: 'borderWidth'
-      },
-      length: {
-        property: 'borderLeftWidth',
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-r': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: 'borderRightColor',
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: 'borderRightWidth',
-        config: 'borderWidth'
-      },
-      length: {
-        property: 'borderRightWidth',
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-x': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    prop: '--tw-border-opacity',
-    coerced: {
-      color: {
-        property: ['borderLeftColor', 'borderRightColor'],
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: ['borderLeftWidth', 'borderRightWidth'],
-        config: 'borderWidth'
-      },
-      length: {
-        property: ['borderLeftWidth', 'borderRightWidth'],
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-y': {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: ['borderTopColor', 'borderBottomColor'],
-        variable: '--tw-border-opacity',
-        config: 'borderColor'
-      },
-      'line-width': {
-        property: ['borderTopColor', 'borderBottomColor'],
-        config: 'borderWidth'
-      },
-      length: {
-        property: ['borderTopColor', 'borderBottomColor'],
-        config: 'borderWidth'
-      }
-    }
-  },
-  'border-opacity': {
-    prop: '--tw-border-opacity',
-    config: 'borderOpacity',
-    configFallback: 'opacity'
-  },
-  border: {
-    value: ['color', 'line-width', 'length'],
-    plugin: 'border',
-    coerced: {
-      color: {
-        property: 'borderColor',
-        variable: '--tw-border-opacity'
-      },
-      'line-width': {
-        property: 'borderWidth'
-      },
-      length: {
-        property: 'borderWidth'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/border-radius
-  'rounded-tl': {
-    prop: 'borderTopLeftRadius',
-    config: 'borderRadius'
-  },
-  'rounded-tr': {
-    prop: 'borderTopRightRadius',
-    config: 'borderRadius'
-  },
-  'rounded-br': {
-    prop: 'borderBottomRightRadius',
-    config: 'borderRadius'
-  },
-  'rounded-bl': {
-    prop: 'borderBottomLeftRadius',
-    config: 'borderRadius'
-  },
-  'rounded-t': {
-    prop: ['borderTopLeftRadius', 'borderTopRightRadius'],
-    config: 'borderRadius'
-  },
-  'rounded-r': {
-    prop: ['borderTopRightRadius', 'borderBottomRightRadius'],
-    config: 'borderRadius'
-  },
-  'rounded-b': {
-    prop: ['borderBottomLeftRadius', 'borderBottomRightRadius'],
-    config: 'borderRadius'
-  },
-  'rounded-l': {
-    prop: ['borderTopLeftRadius', 'borderBottomLeftRadius'],
-    config: 'borderRadius'
-  },
-  rounded: {
-    prop: 'borderRadius',
-    config: 'borderRadius'
-  },
-  // https://tailwindcss.com/docs/ring-opacity
-  'ring-opacity': {
-    prop: '--tw-ring-opacity',
-    config: 'ringOpacity',
-    configFallback: 'opacity'
-  },
-  // https://tailwindcss.com/docs/ring-offset-width
-  // https://tailwindcss.com/docs/ring-offset-color
-  'ring-offset': {
-    prop: '--tw-ring-offset-width',
-    value: ['length', 'color'],
-    plugin: 'ringOffset',
-    coerced: {
-      color: {
-        property: '--tw-ring-offset-color'
-      },
-      length: {
-        property: '--tw-ring-offset-width'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/ring-width
-  // https://tailwindcss.com/docs/ring-color
-  ring: {
-    plugin: 'ring',
-    value: ['color', 'length'],
-    coerced: {
-      color: {
-        property: '--tw-ring-color',
-        variable: '--tw-ring-opacity'
-      },
-      length: function (value) { return ({
-        '--tw-ring-offset-shadow': 'var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)',
-        '--tw-ring-shadow': ("var(--tw-ring-inset) 0 0 0 calc(" + value + " + var(--tw-ring-offset-width)) var(--tw-ring-color)"),
-        boxShadow: ["var(--tw-ring-offset-shadow)", "var(--tw-ring-shadow)", "var(--tw-shadow, 0 0 #0000)"].join(', ')
-      }); }
-    }
-  },
-
-  /**
-   * ===========================================
-   * Tables
-   */
-  // https://tailwindcss.com/docs/border-collapse
-  // https://tailwindcss.com/docs/table-layout
-  // See staticStyles.js
-
-  /**
-   * ===========================================
-   * Effects
-   */
-  // https://tailwindcss.com/docs/box-shadow
-  shadow: {
-    plugin: 'boxShadow',
-    value: ['shadow'],
-    coerced: {
-      shadow: {
-        property: 'boxShadow'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/opacity
-  opacity: {
-    prop: 'opacity',
-    config: 'opacity'
-  },
-
-  /**
-   * ===========================================
-   * Filters
-   */
-  // https://tailwindcss.com/docs/filter
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/blur
-  blur: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-blur': ("blur(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'blur'
-  },
-  // https://tailwindcss.com/docs/brightness
-  brightness: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-brightness': ("brightness(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'brightness'
-  },
-  // https://tailwindcss.com/docs/contrast
-  contrast: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-contrast': ("contrast(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'contrast'
-  },
-  // https://tailwindcss.com/docs/drop-shadow
-  'drop-shadow': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-drop-shadow': ("drop-shadow(" + value + ")"),
-      filter: 'var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)'
-    });
-},
-    plugin: 'dropShadow'
-  },
-  // https://tailwindcss.com/docs/grayscale
-  grayscale: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-grayscale': ("grayscale(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'grayscale'
-  },
-  // https://tailwindcss.com/docs/hue-rotate
-  'hue-rotate': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-hue-rotate': ("hue-rotate(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'hueRotate'
-  },
-  // https://tailwindcss.com/docs/invert
-  invert: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-invert': ("invert(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'invert'
-  },
-  // https://tailwindcss.com/docs/saturate
-  saturate: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-saturate': ("saturate(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'saturate'
-  },
-  // https://tailwindcss.com/docs/sepia
-  sepia: {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-sepia': ("sepia(" + value + ")"),
-      filter: 'var(--tw-filter)'
-    });
-},
-    plugin: 'sepia'
-  },
-  // https://tailwindcss.com/docs/backdrop-filter
-  // https://tailwindcss.com/docs/backdrop-blur
-  'backdrop-blur': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-blur': ("blur(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropBlur'
-  },
-  // https://tailwindcss.com/docs/backdrop-brightness
-  'backdrop-brightness': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-brightness': ("brightness(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropBrightness'
-  },
-  // https://tailwindcss.com/docs/backdrop-contrast
-  'backdrop-contrast': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-contrast': ("contrast(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropContrast'
-  },
-  // https://tailwindcss.com/docs/backdrop-grayscale
-  'backdrop-grayscale': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-grayscale': ("grayscale(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropGrayscale'
-  },
-  // https://tailwindcss.com/docs/backdrop-hue-rotate
-  'backdrop-hue-rotate': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-hue-rotate': ("hue-rotate(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropHueRotate'
-  },
-  // https://tailwindcss.com/docs/backdrop-invert
-  'backdrop-invert': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-invert': ("invert(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropInvert'
-  },
-  // https://tailwindcss.com/docs/backdrop-opacity
-  'backdrop-opacity': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-opacity': ("opacity(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropOpacity'
-  },
-  // https://tailwindcss.com/docs/backdrop-saturate
-  'backdrop-saturate': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-saturate': ("saturate(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropSaturate'
-  },
-  // https://tailwindcss.com/docs/backdrop-sepia
-  'backdrop-sepia': {
-    value: function (ref) {
-      var value = ref.value;
-
-      return ({
-      '--tw-backdrop-sepia': ("sepia(" + value + ")"),
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    });
-},
-    plugin: 'backdropSepia'
-  },
-
-  /**
-   * ===========================================
-   * Transitions
-   */
-  // https://tailwindcss.com/docs/transtiion-property
-  // Note: Tailwind doesn't allow an arbitrary value but it's likely just an accident so it's been added here
-  transition: {
-    plugin: 'transition',
-    value: ['lookup'],
-    coerced: {
-      lookup: function (value, theme) { return ({
-        transitionProperty: value,
-        transitionTimingFunction: theme('transitionTimingFunction.DEFAULT'),
-        transitionDuration: theme('transitionDuration.DEFAULT')
-      }); }
-    }
-  },
-  // https://tailwindcss.com/docs/transition-duration
-  duration: {
-    prop: 'transitionDuration',
-    config: 'transitionDuration'
-  },
-  // https://tailwindcss.com/docs/transition-timing-function
-  ease: {
-    prop: 'transitionTimingFunction',
-    config: 'transitionTimingFunction'
-  },
-  // https://tailwindcss.com/docs/transition-delay
-  delay: {
-    prop: 'transitionDelay',
-    config: 'transitionDelay'
-  },
-
-  /**
-   * ===========================================
-   * Transforms
-   */
-  // https://tailwindcss.com/docs/scale
-  'scale-x': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-scale-x': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'scale'
-  },
-  'scale-y': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-scale-y': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'scale'
-  },
-  scale: {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-scale-x': ("" + negative + value),
-      '--tw-scale-y': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'scale'
-  },
-  // https://tailwindcss.com/docs/rotate
-  rotate: {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-rotate': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'rotate'
-  },
-  // https://tailwindcss.com/docs/translate
-  'translate-x': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-translate-x': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'translate'
-  },
-  'translate-y': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-translate-y': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'translate'
-  },
-  // https://tailwindcss.com/docs/skew
-  'skew-x': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-skew-x': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'skew'
-  },
-  'skew-y': {
-    value: function (ref) {
-      var value = ref.value;
-      var negative = ref.negative;
-
-      return ({
-      '--tw-skew-y': ("" + negative + value),
-      transform: 'var(--tw-transform)'
-    });
-},
-    config: 'skew'
-  },
-  // https://tailwindcss.com/docs/transform-origin
-  origin: {
-    prop: 'transformOrigin',
-    config: 'transformOrigin'
-  },
-
-  /**
-   * ===========================================
-   * Interactivity
-   */
-  // https://tailwindcss.com/docs/accent-color
-  accent: {
-    plugin: 'accentColor',
-    prop: 'accentColor',
-    value: ['color', 'any'],
-    coerced: {
-      color: {
-        property: 'accentColor'
-      },
-      any: {
-        property: 'accentColor'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/appearance
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/cursor
-  cursor: {
-    prop: 'cursor',
-    config: 'cursor'
-  },
-  // https://tailwindcss.com/docs/outline
-  outline: {
-    prop: 'outlineColor',
-    values: ['length', 'number', 'color', 'percentage'],
-    coerced: {
-      length: {
-        property: 'outlineWidth'
-      },
-      number: {
-        property: 'outlineWidth'
-      },
-      color: {
-        property: 'outlineColor'
-      },
-      percentage: {
-        property: 'outlineWidth'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/pointer-events
-  // https://tailwindcss.com/docs/resize
-  // https://tailwindcss.com/docs/scroll-margin
-  'scroll-m': {
-    prop: 'scrollMargin',
-    config: 'scrollMargin'
-  },
-  'scroll-mx': {
-    prop: ['scrollMarginLeft', 'scrollMarginRight'],
-    config: 'scrollMargin'
-  },
-  'scroll-my': {
-    prop: ['scrollMarginTop', 'scrollMarginBottom'],
-    config: 'scrollMargin'
-  },
-  'scroll-mt': {
-    prop: 'scrollMarginTop',
-    config: 'scrollMargin'
-  },
-  'scroll-mr': {
-    prop: 'scrollMarginRight',
-    config: 'scrollMargin'
-  },
-  'scroll-mb': {
-    prop: 'scrollMarginBottom',
-    config: 'scrollMargin'
-  },
-  'scroll-ml': {
-    prop: 'scrollMarginLeft',
-    config: 'scrollMargin'
-  },
-  // https://tailwindcss.com/docs/scroll-padding
-  'scroll-p': {
-    prop: 'scrollPadding',
-    config: 'scrollPadding'
-  },
-  'scroll-px': {
-    prop: ['scrollPaddingLeft', 'scrollPaddingRight'],
-    config: 'scrollPadding'
-  },
-  'scroll-py': {
-    prop: ['scrollPaddingTop', 'scrollPaddingBottom'],
-    config: 'scrollPadding'
-  },
-  'scroll-pt': {
-    prop: 'scrollPaddingTop',
-    config: 'scrollPadding'
-  },
-  'scroll-pr': {
-    prop: 'scrollPaddingRight',
-    config: 'scrollPadding'
-  },
-  'scroll-pb': {
-    prop: 'scrollPaddingBottom',
-    config: 'scrollPadding'
-  },
-  'scroll-pl': {
-    prop: 'scrollPaddingLeft',
-    config: 'scrollPadding'
-  },
-  // https://tailwindcss.com/docs/user-select
-  // See staticStyles.js
-  // https://tailwindcss.com/docs/will-change
-  'will-change': {
-    prop: 'willChange',
-    config: 'willChange'
-  },
-
-  /**
-   * ===========================================
-   * Svg
-   */
-  // https://tailwindcss.com/docs/fill
-  fill: {
-    value: ['color', 'any'],
-    plugin: 'fill',
-    coerced: {
-      color: {
-        property: 'fill'
-      },
-      any: {
-        property: 'fill'
-      }
-    }
-  },
-  // https://tailwindcss.com/docs/stroke
-  stroke: {
-    value: ['color', 'length', 'number', 'percentage', 'url'],
-    plugin: 'stroke',
-    coerced: {
-      color: {
-        property: 'stroke'
-      },
-      length: {
-        property: 'strokeWidth'
-      },
-      number: {
-        property: 'strokeWidth'
-      },
-      percentage: {
-        property: 'strokeWidth'
-      },
-      url: {
-        property: 'stroke'
-      }
-    }
-  },
-
-  /**
-   * ===========================================
-   * Accessibility
-   */
-  // https://tailwindcss.com/docs/screen-readers
-  // See staticStyles.js
-
-  /**
-   * ===========================================
-   * Aspect Ratio
-   */
-  // https://tailwindcss.com/docs/aspect-ratio
-  aspect: {
-    prop: 'aspectRatio',
-    config: 'aspectRatio'
+    return;
   }
+
+  const classes = formatProp(rawClasses); // Add a new attribute
+
+  path.pushContainer('attributes', t.jSXAttribute(t.jSXIdentifier(propName), t.jSXExpressionContainer(t.stringLiteral(classes))));
 };
 
 // https://tailwindcss.com/docs/font-variant-numeric
 // This feature uses var+comment hacks to get around property stripping:
 // https://github.com/tailwindlabs/tailwindcss.com/issues/522#issuecomment-687667238
-var fontVariants = {
-  '--tw-ordinal': 'var(--tw-empty,/*!*/ /*!*/)',
-  '--tw-slashed-zero': 'var(--tw-empty,/*!*/ /*!*/)',
-  '--tw-numeric-figure': 'var(--tw-empty,/*!*/ /*!*/)',
-  '--tw-numeric-spacing': 'var(--tw-empty,/*!*/ /*!*/)',
-  '--tw-numeric-fraction': 'var(--tw-empty,/*!*/ /*!*/)',
-  fontVariantNumeric: 'var(--tw-ordinal) var(--tw-slashed-zero) var(--tw-numeric-figure) var(--tw-numeric-spacing) var(--tw-numeric-fraction)'
-};
-var staticStyles = {
-  /**
-   * ===========================================
-   * Layout
-   */
+const cssFontVariantNumericValue = 'var(--tw-ordinal) var(--tw-slashed-zero) var(--tw-numeric-figure) var(--tw-numeric-spacing) var(--tw-numeric-fraction)';
+const cssTransformValue = ['translate(var(--tw-translate-x), var(--tw-translate-y))', 'rotate(var(--tw-rotate))', 'skewX(var(--tw-skew-x))', 'skewY(var(--tw-skew-y))', 'scaleX(var(--tw-scale-x))', 'scaleY(var(--tw-scale-y))'].join(' ');
+const cssFilterValue = ['var(--tw-blur)', 'var(--tw-brightness)', 'var(--tw-contrast)', 'var(--tw-grayscale)', 'var(--tw-hue-rotate)', 'var(--tw-invert)', 'var(--tw-saturate)', 'var(--tw-sepia)', 'var(--tw-drop-shadow)'].join(' ');
+const cssBackdropFilterValue = ['var(--tw-backdrop-blur)', 'var(--tw-backdrop-brightness)', 'var(--tw-backdrop-contrast)', 'var(--tw-backdrop-grayscale)', 'var(--tw-backdrop-hue-rotate)', 'var(--tw-backdrop-invert)', 'var(--tw-backdrop-opacity)', 'var(--tw-backdrop-saturate)', 'var(--tw-backdrop-sepia)'].join(' ');
+const cssTouchActionValue = 'var(--tw-pan-x) var(--tw-pan-y) var(--tw-pinch-zoom)';
+var corePlugins = {
   // https://tailwindcss.com/docs/container
+  container: {
+    output({
+      theme,
+      pieces
+    }) {
+      const {
+        className
+      } = pieces;
+      if (className !== 'container') return;
+      const container = theme('container');
+      const {
+        padding,
+        margin,
+        center
+      } = container;
+      const screens = container.screens || theme('screens'); // eslint-disable-next-line unicorn/consistent-function-scoping
+
+      const properties = type => ({
+        left: `${type}Left`,
+        right: `${type}Right`
+      });
+
+      const getSpacingFromArray = ({
+        values,
+        left,
+        right
+      }) => {
+        if (!Array.isArray(values)) return;
+        const [valueLeft, valueRight] = values;
+        return {
+          [left]: valueLeft,
+          [right]: valueRight
+        };
+      };
+
+      const getSpacingStyle = (type, values, key) => {
+        if (Array.isArray(values) || typeof values !== 'object') return;
+        const propertyValue = values[key];
+        if (!propertyValue) return;
+        const objectArraySpacing = getSpacingFromArray(_extends({
+          values: propertyValue
+        }, properties(type)));
+        if (objectArraySpacing) return objectArraySpacing;
+        return {
+          [properties(type).left]: propertyValue,
+          [properties(type).right]: propertyValue
+        };
+      };
+
+      const mediaScreens = Object.entries(screens).reduce((accumulator, [key, rawValue]) => {
+        const value = typeof rawValue === 'object' ? rawValue.min || rawValue['min-width'] : rawValue;
+        return _extends({}, accumulator, {
+          [`@media (min-width: ${value})`]: _extends({
+            maxWidth: value
+          }, padding && getSpacingStyle('padding', padding, key), !center && margin && getSpacingStyle('margin', margin, key))
+        });
+      }, {});
+      const paddingStyles = Array.isArray(padding) ? getSpacingFromArray(_extends({
+        values: padding
+      }, properties('padding'))) : typeof padding === 'object' ? getSpacingStyle('padding', padding, 'DEFAULT') : {
+        paddingLeft: padding,
+        paddingRight: padding
+      };
+      let marginStyles = Array.isArray(margin) ? getSpacingFromArray(_extends({
+        values: margin
+      }, properties('margin'))) : typeof margin === 'object' ? getSpacingStyle('margin', margin, 'DEFAULT') : {
+        marginLeft: margin,
+        marginRight: margin
+      }; // { center: true } overrides any margin styles
+
+      if (center) marginStyles = {
+        marginLeft: 'auto',
+        marginRight: 'auto'
+      };
+      return _extends({
+        width: '100%'
+      }, paddingStyles, marginStyles, mediaScreens);
+    },
+
+    supportsImportant: false
+  },
+  // https://tailwindcss.com/docs/screen-readers
+  'sr-only': {
+    output: {
+      position: 'absolute',
+      width: '1px',
+      height: '1px',
+      padding: '0',
+      margin: '-1px',
+      overflow: 'hidden',
+      clip: 'rect(0, 0, 0, 0)',
+      whiteSpace: 'nowrap',
+      borderWidth: '0'
+    },
+    config: 'accessibility'
+  },
+  'not-sr-only': {
+    output: {
+      position: 'static',
+      width: 'auto',
+      height: 'auto',
+      padding: '0',
+      margin: '0',
+      overflow: 'visible',
+      clip: 'auto',
+      whiteSpace: 'normal'
+    },
+    config: 'accessibility'
+  },
+  // https://tailwindcss.com/docs/pointer-events
+  'pointer-events-none': {
+    output: {
+      pointerEvents: 'none'
+    }
+  },
+  'pointer-events-auto': {
+    output: {
+      pointerEvents: 'auto'
+    }
+  },
+  // https://tailwindcss.com/docs/visibility
+  visible: {
+    output: {
+      visibility: 'visible'
+    }
+  },
+  invisible: {
+    output: {
+      visibility: 'hidden'
+    }
+  },
+  // https://tailwindcss.com/docs/position
+  static: {
+    output: {
+      position: 'static'
+    }
+  },
+  fixed: {
+    output: {
+      position: 'fixed'
+    }
+  },
+  absolute: {
+    output: {
+      position: 'absolute'
+    }
+  },
+  relative: {
+    output: {
+      position: 'relative'
+    }
+  },
+  sticky: {
+    output: {
+      position: 'sticky'
+    }
+  },
+  // https://tailwindcss.com/docs/top-right-bottom-left
+  'inset-y': {
+    property: ['top', 'bottom'],
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  'inset-x': {
+    property: ['left', 'right'],
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  inset: {
+    property: ['top', 'right', 'bottom', 'left'],
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/top-right-bottom-left
+  top: {
+    property: 'top',
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  bottom: {
+    property: 'bottom',
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  right: {
+    property: 'right',
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  left: {
+    property: 'left',
+    config: 'inset',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/isolation
+  isolate: {
+    output: {
+      isolation: 'isolate'
+    }
+  },
+  'isolation-auto': {
+    output: {
+      isolation: 'auto'
+    }
+  },
+  // https://tailwindcss.com/docs/z-index
+  z: {
+    property: 'zIndex',
+    config: 'zIndex',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/order
+  order: {
+    property: 'order',
+    config: 'order',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/grid-column
+  col: {
+    property: 'gridColumn',
+    config: 'gridColumn'
+  },
+  'col-start': {
+    property: 'gridColumnStart',
+    config: 'gridColumnStart'
+  },
+  'col-end': {
+    property: 'gridColumnEnd',
+    config: 'gridColumnEnd'
+  },
+  // Deprecated since tailwindcss v1.7.0
+  'col-gap': {
+    property: 'columnGap',
+    config: 'gap'
+  },
+  'row-gap': {
+    property: 'rowGap',
+    config: 'gap'
+  },
+  // https://tailwindcss.com/docs/grid-row
+  row: {
+    property: 'gridRow',
+    config: 'gridRow'
+  },
+  'row-start': {
+    property: 'gridRowStart',
+    config: 'gridRowStart'
+  },
+  'row-end': {
+    property: 'gridRowEnd',
+    config: 'gridRowEnd'
+  },
+  // https://tailwindcss.com/docs/float
+  'float-right': {
+    output: {
+      float: 'right'
+    }
+  },
+  'float-left': {
+    output: {
+      float: 'left'
+    }
+  },
+  'float-none': {
+    output: {
+      float: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/clear
+  'clear-left': {
+    output: {
+      clear: 'left'
+    }
+  },
+  'clear-right': {
+    output: {
+      clear: 'right'
+    }
+  },
+  'clear-both': {
+    output: {
+      clear: 'both'
+    }
+  },
+  'clear-none': {
+    output: {
+      clear: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/margin
+  mt: {
+    property: 'marginTop',
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  mr: {
+    property: 'marginRight',
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  mb: {
+    property: 'marginBottom',
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  ml: {
+    property: 'marginLeft',
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  mx: {
+    property: ['marginLeft', 'marginRight'],
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  my: {
+    property: ['marginTop', 'marginBottom'],
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  m: {
+    property: 'margin',
+    config: 'margin',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/box-sizing
+  'box-border': {
+    output: {
+      boxSizing: 'border-box'
+    }
+  },
+  'box-content': {
+    output: {
+      boxSizing: 'content-box'
+    }
+  },
+  // https://tailwindcss.com/docs/display
+  block: {
+    output: {
+      display: 'block'
+    }
+  },
+  'inline-block': {
+    output: {
+      display: 'inline-block'
+    }
+  },
+  inline: {
+    output: {
+      display: 'inline'
+    }
+  },
+  'inline-flex': {
+    output: {
+      display: 'inline-flex'
+    }
+  },
+  table: {
+    output: {
+      display: 'table'
+    }
+  },
+  'inline-table': {
+    output: {
+      display: 'inline-table'
+    }
+  },
+  'table-caption': {
+    output: {
+      display: 'table-caption'
+    }
+  },
+  'table-cell': {
+    output: {
+      display: 'table-cell'
+    }
+  },
+  'table-column': {
+    output: {
+      display: 'table-column'
+    }
+  },
+  'table-column-group': {
+    output: {
+      display: 'table-column-group'
+    }
+  },
+  'table-footer-group': {
+    output: {
+      display: 'table-footer-group'
+    }
+  },
+  'table-header-group': {
+    output: {
+      display: 'table-header-group'
+    }
+  },
+  'table-row-group': {
+    output: {
+      display: 'table-row-group'
+    }
+  },
+  'table-row': {
+    output: {
+      display: 'table-row'
+    }
+  },
+  'flow-root': {
+    output: {
+      display: 'flow-root'
+    }
+  },
+  grid: {
+    output: {
+      display: 'grid'
+    }
+  },
+  'inline-grid': {
+    output: {
+      display: 'inline-grid'
+    }
+  },
+  contents: {
+    output: {
+      display: 'contents'
+    }
+  },
+  'list-item': {
+    output: {
+      display: 'list-item'
+    }
+  },
+  hidden: {
+    output: {
+      display: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/aspect-ratio
+  aspect: {
+    property: 'aspectRatio',
+    config: 'aspectRatio'
+  },
+  // https://tailwindcss.com/docs/height
+  h: {
+    property: 'height',
+    config: 'height'
+  },
+  // https://tailwindcss.com/docs/max-height
+  'max-h': {
+    property: 'maxHeight',
+    config: 'maxHeight'
+  },
+  // https://tailwindcss.com/docs/min-height
+  'min-h': {
+    property: 'minHeight',
+    config: 'minHeight'
+  },
+  // https://tailwindcss.com/docs/width
+  w: {
+    property: 'width',
+    config: 'width'
+  },
+  // https://tailwindcss.com/docs/min-width
+  'min-w': {
+    property: 'minWidth',
+    config: 'minWidth'
+  },
+  // https://tailwindcss.com/docs/max-width
+  'max-w': {
+    property: 'maxWidth',
+    config: 'maxWidth'
+  },
+  // https://tailwindcss.com/docs/flex
+  flex: [{
+    output: {
+      display: 'flex'
+    }
+  }, {
+    property: 'flex',
+    config: 'flex'
+  }],
+  // https://tailwindcss.com/docs/flex-shrink
+  shrink: {
+    property: 'flexShrink',
+    config: 'flexShrink'
+  },
+  'flex-shrink': {
+    property: 'flexShrink',
+    config: 'flexShrink'
+  },
+  // https://tailwindcss.com/docs/flex-grow
+  'flex-grow': {
+    property: 'flexGrow',
+    config: 'flexGrow'
+  },
+  grow: {
+    property: 'flexGrow',
+    config: 'flexGrow'
+  },
+  // https://tailwindcss.com/docs/flex-basis
+  basis: {
+    property: 'flexBasis',
+    config: 'flexBasis'
+  },
+  // https://tailwindcss.com/docs/table-layout
+  'table-auto': {
+    output: {
+      tableLayout: 'auto'
+    }
+  },
+  'table-fixed': {
+    output: {
+      tableLayout: 'fixed'
+    }
+  },
+  // https://tailwindcss.com/docs/border-collapse
+  'border-collapse': {
+    output: {
+      borderCollapse: 'collapse'
+    }
+  },
+  'border-separate': {
+    output: {
+      borderCollapse: 'separate'
+    }
+  },
+  // TODO: Border spacing
+  // https://tailwindcss.com/docs/transform-origin
+  origin: {
+    property: 'transformOrigin',
+    config: 'transformOrigin'
+  },
+  // https://tailwindcss.com/docs/translate
+  'translate-x': {
+    output: ({
+      value
+    }) => ({
+      '--tw-translate-x': value,
+      transform: cssTransformValue
+    }),
+    config: 'translate',
+    supportsNegativeValues: true
+  },
+  'translate-y': {
+    output: ({
+      value
+    }) => ({
+      '--tw-translate-y': value,
+      transform: cssTransformValue
+    }),
+    config: 'translate',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/rotate
+  rotate: {
+    output: ({
+      value
+    }) => ({
+      '--tw-rotate': value,
+      transform: cssTransformValue
+    }),
+    config: 'rotate',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/skew
+  'skew-x': {
+    output: ({
+      value
+    }) => ({
+      '--tw-skew-x': value,
+      transform: cssTransformValue
+    }),
+    config: 'skew',
+    supportsNegativeValues: true
+  },
+  'skew-y': {
+    output: ({
+      value
+    }) => ({
+      '--tw-skew-y': value,
+      transform: cssTransformValue
+    }),
+    config: 'skew',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/scale
+  'scale-x': {
+    output: ({
+      value
+    }) => ({
+      '--tw-scale-x': value,
+      transform: cssTransformValue
+    }),
+    config: 'scale',
+    supportsNegativeValues: true
+  },
+  'scale-y': {
+    output: ({
+      value
+    }) => ({
+      '--tw-scale-y': value,
+      transform: cssTransformValue
+    }),
+    config: 'scale',
+    supportsNegativeValues: true
+  },
+  scale: {
+    output: ({
+      value
+    }) => ({
+      '--tw-scale-x': value,
+      '--tw-scale-y': value,
+      transform: cssTransformValue
+    }),
+    config: 'scale',
+    supportsNegativeValues: true
+  },
+  transform: {
+    output: {
+      transform: cssTransformValue
+    }
+  },
+  'transform-cpu': {
+    output: {
+      transform: cssTransformValue
+    }
+  },
+  'transform-gpu': {
+    output: {
+      transform: cssTransformValue.replace('translate(var(--tw-translate-x), var(--tw-translate-y))', 'translate3d(var(--tw-translate-x), var(--tw-translate-y), 0)')
+    }
+  },
+  'transform-none': {
+    output: {
+      transform: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/animation
+  animate: {
+    property: 'animation',
+    config: 'animation'
+  },
+  // https://tailwindcss.com/docs/cursor
+  cursor: {
+    property: 'cursor',
+    config: 'cursor'
+  },
+  // https://tailwindcss.com/docs/touch-action
+  'touch-auto': {
+    output: {
+      touchAction: 'auto'
+    }
+  },
+  'touch-none': {
+    output: {
+      touchAction: 'none'
+    }
+  },
+  'touch-pan-x': {
+    output: {
+      '--tw-pan-x': 'pan-x',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pan-left': {
+    output: {
+      '--tw-pan-x': 'pan-left',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pan-right': {
+    output: {
+      '--tw-pan-x': 'pan-right',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pan-y': {
+    output: {
+      '--tw-pan-y': 'pan-y',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pan-up': {
+    output: {
+      '--tw-pan-y': 'pan-up',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pan-down': {
+    output: {
+      '--tw-pan-y': 'pan-down',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-pinch-zoom': {
+    output: {
+      '--tw-pinch-zoom': 'pinch-zoom',
+      touchAction: cssTouchActionValue
+    }
+  },
+  'touch-manipulation': {
+    output: {
+      touchAction: 'manipulation'
+    }
+  },
+  // https://tailwindcss.com/docs/user-select
+  'select-none': {
+    output: {
+      userSelect: 'none'
+    }
+  },
+  'select-text': {
+    output: {
+      userSelect: 'text'
+    }
+  },
+  'select-all': {
+    output: {
+      userSelect: 'all'
+    }
+  },
+  'select-auto': {
+    output: {
+      userSelect: 'auto'
+    }
+  },
+  // https://tailwindcss.com/docs/resize
+  'resize-none': {
+    output: {
+      resize: 'none'
+    }
+  },
+  'resize-y': {
+    output: {
+      resize: 'vertical'
+    }
+  },
+  'resize-x': {
+    output: {
+      resize: 'horizontal'
+    }
+  },
+  resize: {
+    output: {
+      resize: 'both'
+    }
+  },
+  // https://tailwindcss.com/docs/scroll-snap-type
+  'snap-none': {
+    output: {
+      scrollSnapType: 'none'
+    }
+  },
+  'snap-x': {
+    output: {
+      scrollSnapType: 'x var(--tw-scroll-snap-strictness)'
+    }
+  },
+  'snap-y': {
+    output: {
+      scrollSnapType: 'y var(--tw-scroll-snap-strictness)'
+    }
+  },
+  'snap-both': {
+    output: {
+      scrollSnapType: 'both var(--tw-scroll-snap-strictness)'
+    }
+  },
+  'snap-mandatory': {
+    output: {
+      '--tw-scroll-snap-strictness': 'mandatory'
+    }
+  },
+  'snap-proximity': {
+    output: {
+      '--tw-scroll-snap-strictness': 'proximity'
+    }
+  },
+  // https://tailwindcss.com/docs/scroll-snap-align
+  'snap-start': {
+    output: {
+      scrollSnapAlign: 'start'
+    }
+  },
+  'snap-end': {
+    output: {
+      scrollSnapAlign: 'end'
+    }
+  },
+  'snap-center': {
+    output: {
+      scrollSnapAlign: 'center'
+    }
+  },
+  'snap-align-none': {
+    output: {
+      scrollSnapAlign: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/scroll-snap-stop
+  'snap-normal': {
+    output: {
+      scrollSnapStop: 'normal'
+    }
+  },
+  'snap-always': {
+    output: {
+      scrollSnapStop: 'always'
+    }
+  },
+  // https://tailwindcss.com/docs/scroll-margin
+  'scroll-m': {
+    property: 'scrollMargin',
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-mx': {
+    property: ['scrollMarginLeft', 'scrollMarginRight'],
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-my': {
+    property: ['scrollMarginTop', 'scrollMarginBottom'],
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-mt': {
+    property: 'scrollMarginTop',
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-mr': {
+    property: 'scrollMarginRight',
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-mb': {
+    property: 'scrollMarginBottom',
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  'scroll-ml': {
+    property: 'scrollMarginLeft',
+    config: 'scrollMargin',
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/scroll-padding
+  'scroll-p': {
+    property: 'scrollPadding',
+    config: 'scrollPadding'
+  },
+  'scroll-px': {
+    property: ['scrollPaddingLeft', 'scrollPaddingRight'],
+    config: 'scrollPadding'
+  },
+  'scroll-py': {
+    property: ['scrollPaddingTop', 'scrollPaddingBottom'],
+    config: 'scrollPadding'
+  },
+  'scroll-pt': {
+    property: 'scrollPaddingTop',
+    config: 'scrollPadding'
+  },
+  'scroll-pr': {
+    property: 'scrollPaddingRight',
+    config: 'scrollPadding'
+  },
+  'scroll-pb': {
+    property: 'scrollPaddingBottom',
+    config: 'scrollPadding'
+  },
+  'scroll-pl': {
+    property: 'scrollPaddingLeft',
+    config: 'scrollPadding'
+  },
+  // https://tailwindcss.com/docs/list-style-position
+  'list-inside': {
+    output: {
+      listStylePosition: 'inside'
+    }
+  },
+  'list-outside': {
+    output: {
+      listStylePosition: 'outside'
+    }
+  },
+  // https://tailwindcss.com/docs/list-style-type
+  list: {
+    property: 'listStyleType',
+    config: 'listStyleType'
+  },
+  // https://tailwindcss.com/docs/appearance
+  'appearance-none': {
+    output: {
+      appearance: 'none'
+    }
+  },
   // https://tailwindcss.com/docs/columns
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/break-after
-  'break-after-auto': {
-    output: {
-      breakAfter: 'auto'
-    }
-  },
-  'break-after-avoid': {
-    output: {
-      breakAfter: 'avoid'
-    }
-  },
-  'break-after-all': {
-    output: {
-      breakAfter: 'all'
-    }
-  },
-  'break-after-avoid-page': {
-    output: {
-      breakAfter: 'avoid-page'
-    }
-  },
-  'break-after-page': {
-    output: {
-      breakAfter: 'page'
-    }
-  },
-  'break-after-left': {
-    output: {
-      breakAfter: 'left'
-    }
-  },
-  'break-after-right': {
-    output: {
-      breakAfter: 'right'
-    }
-  },
-  'break-after-column': {
-    output: {
-      breakAfter: 'column'
-    }
+  columns: {
+    property: 'columns',
+    config: 'columns'
   },
   // https://tailwindcss.com/docs/break-before
   'break-before-auto': {
@@ -1709,349 +1324,332 @@ var staticStyles = {
       breakInside: 'avoid-column'
     }
   },
-  // https://tailwindcss.com/docs/box-decoration-break
-  'decoration-slice': {
+  // https://tailwindcss.com/docs/break-after
+  'break-after-auto': {
     output: {
-      boxDecorationBreak: 'slice'
+      breakAfter: 'auto'
     }
   },
-  'decoration-clone': {
+  'break-after-avoid': {
     output: {
-      boxDecorationBreak: 'clone'
+      breakAfter: 'avoid'
     }
   },
-  // https://tailwindcss.com/docs/box-sizing
-  'box-border': {
+  'break-after-all': {
     output: {
-      boxSizing: 'border-box'
+      breakAfter: 'all'
     }
   },
-  'box-content': {
+  'break-after-avoid-page': {
     output: {
-      boxSizing: 'content-box'
+      breakAfter: 'avoid-page'
     }
   },
-  'outline-none': {
+  'break-after-page': {
     output: {
-      outline: 'none'
+      breakAfter: 'page'
     }
   },
-  // https://tailwindcss.com/docs/display
-  hidden: {
+  'break-after-left': {
     output: {
-      display: 'none'
+      breakAfter: 'left'
     }
   },
-  block: {
+  'break-after-right': {
     output: {
-      display: 'block'
+      breakAfter: 'right'
     }
   },
-  contents: {
+  'break-after-column': {
     output: {
-      display: 'contents'
+      breakAfter: 'column'
     }
   },
-  'list-item': {
+  // https://tailwindcss.com/docs/grid-auto-columns
+  'auto-cols': {
+    property: 'gridAutoColumns',
+    config: 'gridAutoColumns'
+  },
+  // https://tailwindcss.com/docs/grid-auto-flow
+  'grid-flow-row': {
     output: {
-      display: 'list-item'
+      gridAutoFlow: 'row'
     }
   },
-  'inline-block': {
+  'grid-flow-col': {
     output: {
-      display: 'inline-block'
+      gridAutoFlow: 'column'
     }
   },
-  inline: {
+  'grid-flow-row-dense': {
     output: {
-      display: 'inline'
+      gridAutoFlow: 'row dense'
     }
   },
-  'flow-root': {
+  'grid-flow-col-dense': {
     output: {
-      display: 'flow-root'
+      gridAutoFlow: 'column dense'
     }
   },
-  flex: {
+  // https://tailwindcss.com/docs/grid-auto-rows
+  'auto-rows': {
+    property: 'gridAutoRows',
+    config: 'gridAutoRows'
+  },
+  // https://tailwindcss.com/docs/grid-template-columns
+  'grid-cols': {
+    property: 'gridTemplateColumns',
+    config: 'gridTemplateColumns'
+  },
+  // https://tailwindcss.com/docs/grid-template-rows
+  'grid-rows': {
+    property: 'gridTemplateRows',
+    config: 'gridTemplateRows'
+  },
+  // https://tailwindcss.com/docs/flexbox-direction
+  'flex-row': {
     output: {
-      display: 'flex'
+      flexDirection: 'row'
     }
   },
-  'inline-flex': {
+  'flex-row-reverse': {
     output: {
-      display: 'inline-flex'
+      flexDirection: 'row-reverse'
     }
   },
-  grid: {
+  'flex-col': {
     output: {
-      display: 'grid'
+      flexDirection: 'column'
     }
   },
-  'inline-grid': {
+  'flex-col-reverse': {
     output: {
-      display: 'inline-grid'
+      flexDirection: 'column-reverse'
     }
   },
-  table: {
+  // https://tailwindcss.com/docs/flex-wrap
+  'flex-wrap': {
     output: {
-      display: 'table'
+      flexWrap: 'wrap'
     }
   },
-  'inline-table': {
+  'flex-wrap-reverse': {
     output: {
-      display: 'inline-table'
+      flexWrap: 'wrap-reverse'
     }
   },
-  'table-caption': {
+  'flex-nowrap': {
     output: {
-      display: 'table-caption'
+      flexWrap: 'nowrap'
     }
   },
-  'table-cell': {
+  // https://tailwindcss.com/docs/place-content
+  'place-content-center': {
     output: {
-      display: 'table-cell'
+      placeContent: 'center'
     }
   },
-  'table-column': {
+  'place-content-start': {
     output: {
-      display: 'table-column'
+      placeContent: 'start'
     }
   },
-  'table-column-group': {
+  'place-content-end': {
     output: {
-      display: 'table-column-group'
+      placeContent: 'end'
     }
   },
-  'table-footer-group': {
+  'place-content-between': {
     output: {
-      display: 'table-footer-group'
+      placeContent: 'space-between'
     }
   },
-  'table-header-group': {
+  'place-content-around': {
     output: {
-      display: 'table-header-group'
+      placeContent: 'space-around'
     }
   },
-  'table-row-group': {
+  'place-content-evenly': {
     output: {
-      display: 'table-row-group'
+      placeContent: 'space-evenly'
     }
   },
-  'table-row': {
+  'place-content-stretch': {
     output: {
-      display: 'table-row'
+      placeContent: 'stretch'
     }
   },
-  // https://tailwindcss.com/docs/float
-  'float-right': {
+  // https://tailwindcss.com/docs/place-items
+  'place-items-start': {
     output: {
-      float: 'right'
+      placeItems: 'start'
     }
   },
-  'float-left': {
+  'place-items-end': {
     output: {
-      float: 'left'
+      placeItems: 'end'
     }
   },
-  'float-none': {
+  'place-items-center': {
     output: {
-      float: 'none'
+      placeItems: 'center'
     }
   },
-  // https://tailwindcss.com/docs/clear
-  'clear-left': {
+  'place-items-stretch': {
     output: {
-      clear: 'left'
+      placeItems: 'stretch'
     }
   },
-  'clear-right': {
+  // https://tailwindcss.com/docs/align-content
+  'content-center': {
     output: {
-      clear: 'right'
+      alignContent: 'center'
     }
   },
-  'clear-both': {
+  'content-start': {
     output: {
-      clear: 'both'
+      alignContent: 'flex-start'
     }
   },
-  'clear-none': {
+  'content-end': {
     output: {
-      clear: 'none'
+      alignContent: 'flex-end'
     }
   },
-  // https://tailwindcss.com/docs/isolation
-  isolate: {
+  'content-between': {
     output: {
-      isolation: 'isolate'
+      alignContent: 'space-between'
     }
   },
-  'isolation-auto': {
+  'content-around': {
     output: {
-      isolation: 'auto'
+      alignContent: 'space-around'
     }
   },
-  // https://tailwindcss.com/docs/object-fit
-  'object-contain': {
+  'content-evenly': {
     output: {
-      objectFit: 'contain'
+      alignContent: 'space-evenly'
     }
   },
-  'object-cover': {
+  // https://tailwindcss.com/docs/align-items
+  'items-start': {
     output: {
-      objectFit: 'cover'
+      alignItems: 'flex-start'
     }
   },
-  'object-fill': {
+  'items-end': {
     output: {
-      objectFit: 'fill'
+      alignItems: 'flex-end'
     }
   },
-  'object-none': {
+  'items-center': {
     output: {
-      objectFit: 'none'
+      alignItems: 'center'
     }
   },
-  'object-scale-down': {
+  'items-baseline': {
     output: {
-      objectFit: 'scale-down'
+      alignItems: 'baseline'
     }
   },
-  // https://tailwindcss.com/docs/object-position
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/overflow
-  'overflow-auto': {
+  'items-stretch': {
     output: {
-      overflow: 'auto'
-    },
-    config: 'overflow'
-  },
-  'overflow-hidden': {
-    output: {
-      overflow: 'hidden'
-    },
-    config: 'overflow'
-  },
-  'overflow-visible': {
-    output: {
-      overflow: 'visible'
-    },
-    config: 'overflow'
-  },
-  'overflow-scroll': {
-    output: {
-      overflow: 'scroll'
-    },
-    config: 'overflow'
-  },
-  'overflow-x-auto': {
-    output: {
-      overflowX: 'auto'
-    },
-    config: 'overflow'
-  },
-  'overflow-y-auto': {
-    output: {
-      overflowY: 'auto'
-    },
-    config: 'overflow'
-  },
-  'overflow-x-hidden': {
-    output: {
-      overflowX: 'hidden'
-    },
-    config: 'overflow'
-  },
-  'overflow-y-hidden': {
-    output: {
-      overflowY: 'hidden'
-    },
-    config: 'overflow'
-  },
-  'overflow-x-visible': {
-    output: {
-      overflowX: 'visible'
-    },
-    config: 'overflow'
-  },
-  'overflow-y-visible': {
-    output: {
-      overflowY: 'visible'
-    },
-    config: 'overflow'
-  },
-  'overflow-x-scroll': {
-    output: {
-      overflowX: 'scroll'
-    },
-    config: 'overflow'
-  },
-  'overflow-y-scroll': {
-    output: {
-      overflowY: 'scroll'
-    },
-    config: 'overflow'
-  },
-  'overflow-clip': {
-    output: {
-      overflow: 'clip'
-    },
-    config: 'overflow'
-  },
-  'overflow-x-clip': {
-    output: {
-      overflowX: 'clip'
-    },
-    config: 'overflow'
-  },
-  'overflow-y-clip': {
-    output: {
-      overflowY: 'clip'
-    },
-    config: 'overflow'
-  },
-  // https://tailwindcss.com/docs/position
-  static: {
-    output: {
-      position: 'static'
+      alignItems: 'stretch'
     }
   },
-  fixed: {
+  // https://tailwindcss.com/docs/justify-content
+  'justify-start': {
     output: {
-      position: 'fixed'
+      justifyContent: 'flex-start'
     }
   },
-  absolute: {
+  'justify-end': {
     output: {
-      position: 'absolute'
+      justifyContent: 'flex-end'
     }
   },
-  relative: {
+  'justify-center': {
     output: {
-      position: 'relative'
+      justifyContent: 'center'
     }
   },
-  sticky: {
+  'justify-between': {
     output: {
-      position: 'sticky'
+      justifyContent: 'space-between'
     }
   },
-  // https://tailwindcss.com/docs/top-right-bottom-left
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/visibility
-  visible: {
+  'justify-around': {
     output: {
-      visibility: 'visible'
+      justifyContent: 'space-around'
     }
   },
-  invisible: {
+  'justify-evenly': {
     output: {
-      visibility: 'hidden'
+      justifyContent: 'space-evenly'
     }
   },
-  // https://tailwindcss.com/docs/z-index
-  // See dynamicStyles.js
+  // https://tailwindcss.com/docs/justify-items
+  'justify-items-start': {
+    output: {
+      justifyItems: 'start'
+    }
+  },
+  'justify-items-end': {
+    output: {
+      justifyItems: 'end'
+    }
+  },
+  'justify-items-center': {
+    output: {
+      justifyItems: 'center'
+    }
+  },
+  'justify-items-stretch': {
+    output: {
+      justifyItems: 'stretch'
+    }
+  },
+  // https://tailwindcss.com/docs/gap
+  gap: {
+    property: 'gap',
+    config: 'gap'
+  },
+  'gap-x': {
+    property: 'columnGap',
+    config: 'gap'
+  },
+  'gap-y': {
+    property: 'rowGap',
+    config: 'gap'
+  },
   // https://tailwindcss.com/docs/space
-  // See dynamicStyles.js for the rest
+  'space-y': {
+    config: 'space',
+    output: ({
+      value
+    }) => ({
+      '> :not([hidden]) ~ :not([hidden])': {
+        '--tw-space-y-reverse': '0',
+        marginTop: `calc(${value} * calc(1 - var(--tw-space-y-reverse)))`,
+        marginBottom: `calc(${value} * var(--tw-space-y-reverse))`
+      }
+    }),
+    supportsNegativeValues: true
+  },
+  'space-x': {
+    config: 'space',
+    output: ({
+      value
+    }) => ({
+      '> :not([hidden]) ~ :not([hidden])': {
+        '--tw-space-x-reverse': '0',
+        marginRight: `calc(${value} * var(--tw-space-x-reverse))`,
+        marginLeft: `calc(${value} * calc(1 - var(--tw-space-x-reverse)))`
+      }
+    }),
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/space
   'space-x-reverse': {
     output: {
       '> :not([hidden]) ~ :not([hidden])': {
@@ -2066,8 +1664,74 @@ var staticStyles = {
       }
     }
   },
+  'divide-y': {
+    config: 'divideWidth',
+    output: ({
+      value
+    }) => ({
+      '> :not([hidden]) ~ :not([hidden])': {
+        '--tw-divide-y-reverse': '0',
+        borderTopWidth: `calc(${value} * calc(1 - var(--tw-divide-y-reverse)))`,
+        borderBottomWidth: `calc(${value} * var(--tw-divide-y-reverse))`
+      }
+    }),
+    coerced: {
+      'line-width': value => ({
+        '> :not([hidden]) ~ :not([hidden])': {
+          '--tw-divide-y-reverse': '0',
+          borderTopWidth: `calc(${value} * calc(1 - var(--tw-divide-y-reverse)))`,
+          borderBottomWidth: `calc(${value} * var(--tw-divide-y-reverse))`
+        }
+      }),
+      length: value => ({
+        '> :not([hidden]) ~ :not([hidden])': {
+          '--tw-divide-y-reverse': '0',
+          borderTopWidth: `calc(${value} * calc(1 - var(--tw-divide-y-reverse)))`,
+          borderBottomWidth: `calc(${value} * var(--tw-divide-y-reverse))`
+        }
+      })
+    }
+  },
+  'divide-x': {
+    config: 'divideWidth',
+    output: ({
+      value
+    }) => ({
+      '> :not([hidden]) ~ :not([hidden])': {
+        '--tw-divide-x-reverse': '0',
+        borderRightWidth: `calc(${value} * var(--tw-divide-x-reverse))`,
+        borderLeftWidth: `calc(${value} * calc(1 - var(--tw-divide-x-reverse)))`
+      }
+    }),
+    coerced: {
+      'line-width': value => ({
+        '> :not([hidden]) ~ :not([hidden])': {
+          '--tw-divide-x-reverse': '0',
+          borderRightWidth: `calc(${value} * var(--tw-divide-x-reverse))`,
+          borderLeftWidth: `calc(${value} * calc(1 - var(--tw-divide-x-reverse)))`
+        }
+      }),
+      length: value => ({
+        '> :not([hidden]) ~ :not([hidden])': {
+          '--tw-divide-x-reverse': '0',
+          borderRightWidth: `calc(${value} * var(--tw-divide-x-reverse))`,
+          borderLeftWidth: `calc(${value} * calc(1 - var(--tw-divide-x-reverse)))`
+        }
+      })
+    }
+  },
+  divide: {
+    config: 'divideColor',
+    coerced: {
+      color: {
+        property: 'borderColor',
+        variable: '--tw-divide-opacity',
+        wrapWith: '> :not([hidden]) ~ :not([hidden])',
+        forceReturn: true
+      }
+    }
+  },
   // https://tailwindcss.com/docs/divide-width
-  // See dynamicStyles.js for the rest
   'divide-x-reverse': {
     output: {
       '> :not([hidden]) ~ :not([hidden])': {
@@ -2118,103 +1782,42 @@ var staticStyles = {
       }
     }
   },
-
-  /**
-   * ===========================================
-   * Flexbox
-   */
-  // https://tailwindcss.com/docs/flexbox-direction
-  'flex-row': {
+  // https://tailwindcss.com/docs/divide-width/
+  'divide-opacity': {
+    config: 'divideOpacity',
+    property: '--tw-divide-opacity',
+    output: ({
+      value
+    }) => ({
+      '> :not([hidden]) ~ :not([hidden])': {
+        '--tw-divide-opacity': value
+      }
+    })
+  },
+  // https://tailwindcss.com/docs/place-self
+  'place-self-auto': {
     output: {
-      flexDirection: 'row'
+      placeSelf: 'auto'
     }
   },
-  'flex-row-reverse': {
+  'place-self-start': {
     output: {
-      flexDirection: 'row-reverse'
+      placeSelf: 'start'
     }
   },
-  'flex-col': {
+  'place-self-end': {
     output: {
-      flexDirection: 'column'
+      placeSelf: 'end'
     }
   },
-  'flex-col-reverse': {
+  'place-self-center': {
     output: {
-      flexDirection: 'column-reverse'
+      placeSelf: 'center'
     }
   },
-  // https://tailwindcss.com/docs/flex-wrap
-  'flex-nowrap': {
+  'place-self-stretch': {
     output: {
-      flexWrap: 'nowrap'
-    }
-  },
-  'flex-wrap': {
-    output: {
-      flexWrap: 'wrap'
-    }
-  },
-  'flex-wrap-reverse': {
-    output: {
-      flexWrap: 'wrap-reverse'
-    }
-  },
-  // https://tailwindcss.com/docs/align-items
-  'items-stretch': {
-    output: {
-      alignItems: 'stretch'
-    }
-  },
-  'items-start': {
-    output: {
-      alignItems: 'flex-start'
-    }
-  },
-  'items-center': {
-    output: {
-      alignItems: 'center'
-    }
-  },
-  'items-end': {
-    output: {
-      alignItems: 'flex-end'
-    }
-  },
-  'items-baseline': {
-    output: {
-      alignItems: 'baseline'
-    }
-  },
-  // https://tailwindcss.com/docs/align-content
-  'content-start': {
-    output: {
-      alignContent: 'flex-start'
-    }
-  },
-  'content-center': {
-    output: {
-      alignContent: 'center'
-    }
-  },
-  'content-end': {
-    output: {
-      alignContent: 'flex-end'
-    }
-  },
-  'content-between': {
-    output: {
-      alignContent: 'space-between'
-    }
-  },
-  'content-around': {
-    output: {
-      alignContent: 'space-around'
-    }
-  },
-  'content-evenly': {
-    output: {
-      alignContent: 'space-evenly'
+      placeSelf: 'stretch'
     }
   },
   // https://tailwindcss.com/docs/align-self
@@ -2223,19 +1826,9 @@ var staticStyles = {
       alignSelf: 'auto'
     }
   },
-  'self-baseline': {
-    output: {
-      alignSelf: 'baseline'
-    }
-  },
   'self-start': {
     output: {
       alignSelf: 'flex-start'
-    }
-  },
-  'self-center': {
-    output: {
-      alignSelf: 'center'
     }
   },
   'self-end': {
@@ -2243,289 +1836,217 @@ var staticStyles = {
       alignSelf: 'flex-end'
     }
   },
+  'self-center': {
+    output: {
+      alignSelf: 'center'
+    }
+  },
   'self-stretch': {
     output: {
       alignSelf: 'stretch'
     }
   },
-  // https://tailwindcss.com/docs/justify-content
-  'justify-start': {
+  'self-baseline': {
     output: {
-      justifyContent: 'flex-start'
+      alignSelf: 'baseline'
     }
   },
-  'justify-center': {
+  // https://tailwindcss.com/docs/justify-self
+  'justify-self-auto': {
     output: {
-      justifyContent: 'center'
+      justifySelf: 'auto'
     }
   },
-  'justify-end': {
+  'justify-self-start': {
     output: {
-      justifyContent: 'flex-end'
+      justifySelf: 'start'
     }
   },
-  'justify-between': {
+  'justify-self-end': {
     output: {
-      justifyContent: 'space-between'
+      justifySelf: 'end'
     }
   },
-  'justify-around': {
+  'justify-self-center': {
     output: {
-      justifyContent: 'space-around'
+      justifySelf: 'center'
     }
   },
-  'justify-evenly': {
+  'justify-self-stretch': {
     output: {
-      justifyContent: 'space-evenly'
+      justifySelf: 'stretch'
     }
   },
-  // https://tailwindcss.com/docs/flex
-  // https://tailwindcss.com/docs/flex-grow
-  // https://tailwindcss.com/docs/flex-shrink
-  // https://tailwindcss.com/docs/order
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Grid
-   */
-  // https://tailwindcss.com/docs/grid-template-columns
-  // https://tailwindcss.com/docs/grid-column
-  // https://tailwindcss.com/docs/grid-template-rows
-  // https://tailwindcss.com/docs/grid-row
-  // https://tailwindcss.com/docs/gap
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/grid-auto-flow
-  'grid-flow-row': {
+  // https://tailwindcss.com/docs/overflow
+  'overflow-auto': {
     output: {
-      gridAutoFlow: 'row'
+      overflow: 'auto'
+    },
+    config: 'overflow'
+  },
+  'overflow-hidden': {
+    output: {
+      overflow: 'hidden'
+    },
+    config: 'overflow'
+  },
+  'overflow-clip': {
+    output: {
+      overflow: 'clip'
+    },
+    config: 'overflow'
+  },
+  'overflow-visible': {
+    output: {
+      overflow: 'visible'
+    },
+    config: 'overflow'
+  },
+  'overflow-scroll': {
+    output: {
+      overflow: 'scroll'
+    },
+    config: 'overflow'
+  },
+  'overflow-x-auto': {
+    output: {
+      overflowX: 'auto'
+    },
+    config: 'overflow'
+  },
+  'overflow-y-auto': {
+    output: {
+      overflowY: 'auto'
+    },
+    config: 'overflow'
+  },
+  'overflow-x-hidden': {
+    output: {
+      overflowX: 'hidden'
+    },
+    config: 'overflow'
+  },
+  'overflow-y-hidden': {
+    output: {
+      overflowY: 'hidden'
+    },
+    config: 'overflow'
+  },
+  'overflow-x-clip': {
+    output: {
+      overflowX: 'clip'
+    },
+    config: 'overflow'
+  },
+  'overflow-y-clip': {
+    output: {
+      overflowY: 'clip'
+    },
+    config: 'overflow'
+  },
+  'overflow-x-visible': {
+    output: {
+      overflowX: 'visible'
+    },
+    config: 'overflow'
+  },
+  'overflow-y-visible': {
+    output: {
+      overflowY: 'visible'
+    },
+    config: 'overflow'
+  },
+  'overflow-x-scroll': {
+    output: {
+      overflowX: 'scroll'
+    },
+    config: 'overflow'
+  },
+  'overflow-y-scroll': {
+    output: {
+      overflowY: 'scroll'
+    },
+    config: 'overflow'
+  },
+  // https://tailwindcss.com/docs/overscroll-behavior
+  'overscroll-auto': {
+    output: {
+      overscrollBehavior: 'auto'
     }
   },
-  'grid-flow-col': {
+  'overscroll-contain': {
     output: {
-      gridAutoFlow: 'column'
+      overscrollBehavior: 'contain'
     }
   },
-  'grid-flow-row-dense': {
+  'overscroll-none': {
     output: {
-      gridAutoFlow: 'row dense'
+      overscrollBehavior: 'none'
     }
   },
-  'grid-flow-col-dense': {
+  'overscroll-y-auto': {
     output: {
-      gridAutoFlow: 'column dense'
+      overscrollBehaviorY: 'auto'
     }
   },
-  // https://tailwindcss.com/docs/grid-auto-columns
-  // https://tailwindcss.com/docs/grid-auto-rows#app
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Spacing
-   */
-  // https://tailwindcss.com/docs/padding
-  // https://tailwindcss.com/docs/margin
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Sizing
-   */
-  // https://tailwindcss.com/docs/width
-  // https://tailwindcss.com/docs/min-width
-  // https://tailwindcss.com/docs/max-width
-  // https://tailwindcss.com/docs/height
-  // https://tailwindcss.com/docs/min-height
-  // https://tailwindcss.com/docs/max-height
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Typography
-   */
-  // https://tailwindcss.com/docs/font-family
-  // https://tailwindcss.com/docs/font-size
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/font-smoothing
-  antialiased: {
+  'overscroll-y-contain': {
     output: {
-      WebkitFontSmoothing: 'antialiased',
-      MozOsxFontSmoothing: 'grayscale'
+      overscrollBehaviorY: 'contain'
     }
   },
-  'subpixel-antialiased': {
+  'overscroll-y-none': {
     output: {
-      WebkitFontSmoothing: 'auto',
-      MozOsxFontSmoothing: 'auto'
+      overscrollBehaviorY: 'none'
     }
   },
-  // https://tailwindcss.com/docs/font-style
-  italic: {
+  'overscroll-x-auto': {
     output: {
-      fontStyle: 'italic'
+      overscrollBehaviorX: 'auto'
     }
   },
-  'not-italic': {
+  'overscroll-x-contain': {
     output: {
-      fontStyle: 'normal'
+      overscrollBehaviorX: 'contain'
     }
   },
-  // https://tailwindcss.com/docs/font-weight
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/font-variant-numeric
-  ordinal: {
-    output: Object.assign({}, fontVariants,
-      {'--tw-ordinal': 'ordinal'})
-  },
-  'slashed-zero': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-slashed-zero': 'slashed-zero'})
-  },
-  'lining-nums': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-figure': 'lining-nums'})
-  },
-  'oldstyle-nums': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-figure': 'oldstyle-nums'})
-  },
-  'proportional-nums': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-spacing': 'proportional-nums'})
-  },
-  'tabular-nums': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-spacing': 'tabular-nums'})
-  },
-  'diagonal-fractions': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-fraction': 'diagonal-fractions'})
-  },
-  'stacked-fractions': {
-    output: Object.assign({}, fontVariants,
-      {'--tw-numeric-fraction': 'stacked-fractions'})
-  },
-  'normal-nums': {
+  'overscroll-x-none': {
     output: {
-      fontVariantNumeric: 'normal'
+      overscrollBehaviorX: 'none'
     }
   },
-  // https://tailwindcss.com/docs/letter-spacing
-  // https://tailwindcss.com/docs/line-height
-  // https://tailwindcss.com/docs/list-style-type
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/list-style-position
-  'list-inside': {
+  // https://tailwindcss.com/docs/scroll-behavior
+  'scroll-auto': {
     output: {
-      listStylePosition: 'inside'
+      scrollBehavior: 'auto'
     }
   },
-  'list-outside': {
+  'scroll-smooth': {
     output: {
-      listStylePosition: 'outside'
+      scrollBehavior: 'smooth'
     }
   },
-  // https://tailwindcss.com/docs/placeholder-color
-  // https://tailwindcss.com/docs/placeholder-opacity
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/text-align
-  'text-left': {
+  // https://tailwindcss.com/docs/text-overflow
+  truncate: {
     output: {
-      textAlign: 'left'
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
     }
   },
-  'text-center': {
+  'overflow-ellipsis': {
     output: {
-      textAlign: 'center'
+      textOverflow: 'ellipsis'
     }
   },
-  'text-right': {
+  'text-ellipsis': {
     output: {
-      textAlign: 'right'
+      textOverflow: 'ellipsis'
     }
   },
-  'text-justify': {
+  // Deprecated
+  'text-clip': {
     output: {
-      textAlign: 'justify'
-    }
-  },
-  // https://tailwindcss.com/docs/text-color
-  // https://tailwindcss.com/docs/text-opacity
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/text-decoration
-  underline: {
-    output: {
-      textDecorationLine: 'underline'
-    }
-  },
-  overline: {
-    output: {
-      textDecorationLine: 'overline'
-    }
-  },
-  'line-through': {
-    output: {
-      textDecorationLine: 'line-through'
-    }
-  },
-  'no-underline': {
-    output: {
-      textDecorationLine: 'none'
-    }
-  },
-  // https://tailwindcss.com/docs/text-transform
-  uppercase: {
-    output: {
-      textTransform: 'uppercase'
-    }
-  },
-  lowercase: {
-    output: {
-      textTransform: 'lowercase'
-    }
-  },
-  capitalize: {
-    output: {
-      textTransform: 'capitalize'
-    }
-  },
-  'normal-case': {
-    output: {
-      textTransform: 'none'
-    }
-  },
-  // https://tailwindcss.com/docs/text-indent
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/vertical-align
-  'align-baseline': {
-    output: {
-      verticalAlign: 'baseline'
-    }
-  },
-  'align-top': {
-    output: {
-      verticalAlign: 'top'
-    }
-  },
-  'align-middle': {
-    output: {
-      verticalAlign: 'middle'
-    }
-  },
-  'align-bottom': {
-    output: {
-      verticalAlign: 'bottom'
-    }
-  },
-  'align-text-top': {
-    output: {
-      verticalAlign: 'text-top'
-    }
-  },
-  'align-text-bottom': {
-    output: {
-      verticalAlign: 'text-bottom'
+      textOverflow: 'clip'
     }
   },
   // https://tailwindcss.com/docs/whitespace
@@ -2574,29 +2095,334 @@ var staticStyles = {
     },
     config: 'wordbreak'
   },
-  // https://tailwindcss.com/docs/text-overflow
-  truncate: {
+  // https://tailwindcss.com/docs/border-radius
+  'rounded-t': {
+    property: ['borderTopLeftRadius', 'borderTopRightRadius'],
+    config: 'borderRadius'
+  },
+  'rounded-r': {
+    property: ['borderTopRightRadius', 'borderBottomRightRadius'],
+    config: 'borderRadius'
+  },
+  'rounded-b': {
+    property: ['borderBottomLeftRadius', 'borderBottomRightRadius'],
+    config: 'borderRadius'
+  },
+  'rounded-l': {
+    property: ['borderTopLeftRadius', 'borderBottomLeftRadius'],
+    config: 'borderRadius'
+  },
+  'rounded-tl': {
+    property: 'borderTopLeftRadius',
+    config: 'borderRadius'
+  },
+  'rounded-tr': {
+    property: 'borderTopRightRadius',
+    config: 'borderRadius'
+  },
+  'rounded-br': {
+    property: 'borderBottomRightRadius',
+    config: 'borderRadius'
+  },
+  'rounded-bl': {
+    property: 'borderBottomLeftRadius',
+    config: 'borderRadius'
+  },
+  rounded: {
+    property: 'borderRadius',
+    config: 'borderRadius'
+  },
+  // https://tailwindcss.com/docs/border-style
+  'border-solid': {
     output: {
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
+      borderStyle: 'solid'
     }
   },
-  'text-ellipsis': {
+  'border-dashed': {
     output: {
-      textOverflow: 'ellipsis'
+      borderStyle: 'dashed'
     }
   },
-  'text-clip': {
+  'border-dotted': {
     output: {
-      textOverflow: 'clip'
+      borderStyle: 'dotted'
     }
   },
-
-  /**
-   * ===========================================
-   * Backgrounds
-   */
+  'border-double': {
+    output: {
+      borderStyle: 'double'
+    }
+  },
+  'border-hidden': {
+    output: {
+      borderStyle: 'hidden'
+    }
+  },
+  'border-none': {
+    output: {
+      borderStyle: 'none'
+    }
+  },
+  border: [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: 'borderWidth'
+      },
+      length: {
+        property: 'borderWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: 'borderColor',
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-x': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: ['borderLeftWidth', 'borderRightWidth']
+      },
+      length: {
+        property: ['borderLeftWidth', 'borderRightWidth']
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: ['borderLeftColor', 'borderRightColor'],
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-y': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: ['borderTopColor', 'borderBottomColor']
+      },
+      length: {
+        property: ['borderTopColor', 'borderBottomColor']
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: ['borderTopColor', 'borderBottomColor'],
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/border-width
+  'border-t': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: 'borderTopWidth'
+      },
+      length: {
+        property: 'borderTopWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: 'borderTopColor',
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-b': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: 'borderBottomWidth'
+      },
+      length: {
+        property: 'borderBottomWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: 'borderBottomColor',
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-l': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: 'borderLeftWidth'
+      },
+      length: {
+        property: 'borderLeftWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: 'borderLeftColor',
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-r': [// https://tailwindcss.com/docs/border-width
+  {
+    config: 'borderWidth',
+    coerced: {
+      'line-width': {
+        property: 'borderRightWidth'
+      },
+      length: {
+        property: 'borderRightWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/border-color
+  {
+    config: 'borderColor',
+    coerced: {
+      color: {
+        property: 'borderRightColor',
+        variable: '--tw-border-opacity'
+      }
+    }
+  }],
+  'border-opacity': {
+    property: '--tw-border-opacity',
+    config: 'borderOpacity'
+  },
+  bg: [// https://tailwindcss.com/docs/background-image
+  // https://tailwindcss.com/docs/background-attachment
+  {
+    config: 'backgroundImage',
+    coerced: {
+      url: {
+        property: 'backgroundImage'
+      },
+      image: {
+        property: 'backgroundImage'
+      }
+    }
+  }, // https://tailwindcss.com/docs/background-position
+  // https://tailwindcss.com/docs/background-origin
+  {
+    config: 'backgroundPosition',
+    coerced: {
+      position: {
+        property: 'backgroundPosition'
+      },
+      percentage: {
+        property: 'backgroundPosition'
+      }
+    }
+  }, // https://tailwindcss.com/docs/background-size
+  {
+    config: 'backgroundSize',
+    coerced: {
+      length: {
+        property: 'backgroundSize'
+      }
+    }
+  }, // https://tailwindcss.com/docs/background-color
+  {
+    config: 'backgroundColor',
+    coerced: {
+      color: {
+        property: 'backgroundColor',
+        variable: '--tw-bg-opacity'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/background-opacity
+  'bg-opacity': {
+    property: '--tw-bg-opacity',
+    config: 'backgroundOpacity'
+  },
+  // https://tailwindcss.com/docs/gradient-color-stops
+  from: {
+    config: 'gradientColorStops',
+    coerced: {
+      color: {
+        output: (value, {
+          withAlpha
+        }) => ({
+          '--tw-gradient-from': withAlpha(value) || value,
+          '--tw-gradient-stops': `var(--tw-gradient-from), var(--tw-gradient-to, ${withAlpha(value, '0', 'rgb(255 255 255 / 0)') || value})`
+        })
+      }
+    }
+  },
+  via: {
+    config: 'gradientColorStops',
+    coerced: {
+      color: {
+        output: (value, {
+          withAlpha
+        }) => ({
+          '--tw-gradient-stops': `var(--tw-gradient-from), ${withAlpha(value) || value}, var(--tw-gradient-to, ${withAlpha(value, '0', 'rgb(255 255 255 / 0)')})`
+        })
+      }
+    }
+  },
+  to: {
+    config: 'gradientColorStops',
+    coerced: {
+      color: {
+        output: (value, {
+          withAlpha
+        }) => ({
+          '--tw-gradient-to': `${withAlpha(value) || value}`
+        })
+      }
+    }
+  },
+  // https://tailwindcss.com/docs/box-decoration-break
+  'decoration-slice': {
+    output: {
+      boxDecorationBreak: 'slice'
+    }
+  },
+  // Deprecated
+  'decoration-clone': {
+    output: {
+      boxDecorationBreak: 'clone'
+    }
+  },
+  // Deprecated
+  'box-decoration-slice': {
+    output: {
+      boxDecorationBreak: 'slice'
+    }
+  },
+  'box-decoration-clone': {
+    output: {
+      boxDecorationBreak: 'clone'
+    }
+  },
   // https://tailwindcss.com/docs/background-attachment
   'bg-fixed': {
     output: {
@@ -2616,48 +2442,24 @@ var staticStyles = {
   // https://tailwindcss.com/docs/background-clip
   'bg-clip-border': {
     output: {
-      WebkitBackgroundClip: 'border-box',
       backgroundClip: 'border-box'
     }
   },
   'bg-clip-padding': {
     output: {
-      WebkitBackgroundClip: 'padding-box',
       backgroundClip: 'padding-box'
     }
   },
   'bg-clip-content': {
     output: {
-      WebkitBackgroundClip: 'content-box',
       backgroundClip: 'content-box'
     }
   },
   'bg-clip-text': {
     output: {
-      WebkitBackgroundClip: 'text',
       backgroundClip: 'text'
     }
   },
-  // https://tailwindcss.com/docs/background-origin
-  'bg-origin-border': {
-    output: {
-      backgroundOrigin: 'border-box'
-    }
-  },
-  'bg-origin-padding': {
-    output: {
-      backgroundOrigin: 'padding-box'
-    }
-  },
-  'bg-origin-content': {
-    output: {
-      backgroundOrigin: 'content-box'
-    }
-  },
-  // https://tailwindcss.com/docs/background-color
-  // https://tailwindcss.com/docs/background-size
-  // https://tailwindcss.com/docs/background-position
-  // See dynamicStyles.js
   // https://tailwindcss.com/docs/background-repeat
   'bg-repeat': {
     output: {
@@ -2689,216 +2491,512 @@ var staticStyles = {
       backgroundRepeat: 'space'
     }
   },
-  // https://tailwindcss.com/docs/background-size
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/gradient-color-stops
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Borders
-   */
-  // https://tailwindcss.com/docs/border-radius
-  // https://tailwindcss.com/docs/border-width
-  // https://tailwindcss.com/docs/border-color
-  // https://tailwindcss.com/docs/border-opacity
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/border-style
-  'border-solid': {
+  // https://tailwindcss.com/docs/background-origin
+  'bg-origin-border': {
     output: {
-      borderStyle: 'solid'
+      backgroundOrigin: 'border-box'
     }
   },
-  'border-dashed': {
+  'bg-origin-padding': {
     output: {
-      borderStyle: 'dashed'
+      backgroundOrigin: 'padding-box'
     }
   },
-  'border-dotted': {
+  'bg-origin-content': {
     output: {
-      borderStyle: 'dotted'
+      backgroundOrigin: 'content-box'
     }
   },
-  'border-double': {
-    output: {
-      borderStyle: 'double'
+  // https://tailwindcss.com/docs/fill
+  fill: {
+    config: 'fill',
+    coerced: {
+      color: {
+        property: 'fill'
+      },
+      any: {
+        property: 'fill'
+      }
     }
   },
-  'border-none': {
+  stroke: [// https://tailwindcss.com/docs/stroke-width
+  {
+    config: 'strokeWidth',
+    coerced: {
+      length: {
+        property: 'strokeWidth'
+      },
+      number: {
+        property: 'strokeWidth'
+      },
+      percentage: {
+        property: 'strokeWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/stroke
+  {
+    config: 'stroke',
+    coerced: {
+      url: {
+        property: 'stroke'
+      },
+      color: {
+        property: 'stroke'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/object-fit
+  'object-contain': {
     output: {
-      borderStyle: 'none'
+      objectFit: 'contain'
     }
   },
-
-  /**
-   * ===========================================
-   * Effects
-   */
-  // https://tailwindcss.com/docs/box-shadow/
+  'object-cover': {
+    output: {
+      objectFit: 'cover'
+    }
+  },
+  'object-fill': {
+    output: {
+      objectFit: 'fill'
+    }
+  },
+  'object-none': {
+    output: {
+      objectFit: 'none'
+    }
+  },
+  'object-scale-down': {
+    output: {
+      objectFit: 'scale-down'
+    }
+  },
+  // https://tailwindcss.com/docs/object-position
+  object: {
+    property: 'objectPosition',
+    config: 'objectPosition'
+  },
+  // https://tailwindcss.com/docs/padding
+  pt: {
+    property: 'paddingTop',
+    config: 'padding'
+  },
+  pr: {
+    property: 'paddingRight',
+    config: 'padding'
+  },
+  pb: {
+    property: 'paddingBottom',
+    config: 'padding'
+  },
+  pl: {
+    property: 'paddingLeft',
+    config: 'padding'
+  },
+  px: {
+    property: ['paddingLeft', 'paddingRight'],
+    config: 'padding'
+  },
+  py: {
+    property: ['paddingTop', 'paddingBottom'],
+    config: 'padding'
+  },
+  p: {
+    property: 'padding',
+    config: 'padding'
+  },
+  // https://tailwindcss.com/docs/text-align
+  'text-left': {
+    output: {
+      textAlign: 'left'
+    }
+  },
+  'text-center': {
+    output: {
+      textAlign: 'center'
+    }
+  },
+  'text-right': {
+    output: {
+      textAlign: 'right'
+    }
+  },
+  'text-justify': {
+    output: {
+      textAlign: 'justify'
+    }
+  },
+  'text-start': {
+    output: {
+      textAlign: 'start'
+    }
+  },
+  'text-end': {
+    output: {
+      textAlign: 'end'
+    }
+  },
+  // https://tailwindcss.com/docs/text-indent
+  indent: {
+    config: 'textIndent',
+    coerced: {
+      length: {
+        property: 'textIndent'
+      },
+      position: {
+        property: 'textIndent'
+      },
+      lookup: {
+        property: 'textIndent'
+      }
+    },
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/vertical-align
+  'align-baseline': {
+    output: {
+      verticalAlign: 'baseline'
+    }
+  },
+  'align-top': {
+    output: {
+      verticalAlign: 'top'
+    }
+  },
+  'align-middle': {
+    output: {
+      verticalAlign: 'middle'
+    }
+  },
+  'align-bottom': {
+    output: {
+      verticalAlign: 'bottom'
+    }
+  },
+  'align-text-top': {
+    output: {
+      verticalAlign: 'text-top'
+    }
+  },
+  'align-text-bottom': {
+    output: {
+      verticalAlign: 'text-bottom'
+    }
+  },
+  'align-sub': {
+    output: {
+      verticalAlign: 'sub'
+    }
+  },
+  'align-super': {
+    output: {
+      verticalAlign: 'super'
+    }
+  },
+  align: {
+    output: ({
+      value
+    }) => value && {
+      verticalAlign: value
+    }
+  },
+  font: [// https://tailwindcss.com/docs/font-weight
+  {
+    config: 'fontWeight',
+    coerced: {
+      number: {
+        property: 'fontWeight'
+      }
+    }
+  }, // https://tailwindcss.com/docs/font-family
+  {
+    config: 'fontFamily',
+    coerced: {
+      'generic-name': {
+        property: 'fontFamily'
+      },
+      'family-name': {
+        property: 'fontFamily'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/text-transform
+  uppercase: {
+    output: {
+      textTransform: 'uppercase'
+    }
+  },
+  lowercase: {
+    output: {
+      textTransform: 'lowercase'
+    }
+  },
+  capitalize: {
+    output: {
+      textTransform: 'capitalize'
+    }
+  },
+  'normal-case': {
+    output: {
+      textTransform: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/font-style
+  italic: {
+    output: {
+      fontStyle: 'italic'
+    }
+  },
+  'not-italic': {
+    output: {
+      fontStyle: 'normal'
+    }
+  },
+  // https://tailwindcss.com/docs/font-variant-numeric
+  'normal-nums': {
+    output: {
+      fontVariantNumeric: 'normal'
+    }
+  },
+  ordinal: {
+    output: {
+      '--tw-ordinal': 'ordinal',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'slashed-zero': {
+    output: {
+      '--tw-slashed-zero': 'slashed-zero',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'lining-nums': {
+    output: {
+      '--tw-numeric-figure': 'lining-nums',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'oldstyle-nums': {
+    output: {
+      '--tw-numeric-figure': 'oldstyle-nums',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'proportional-nums': {
+    output: {
+      '--tw-numeric-spacing': 'proportional-nums',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'tabular-nums': {
+    output: {
+      '--tw-numeric-spacing': 'tabular-nums',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'diagonal-fractions': {
+    output: {
+      '--tw-numeric-fraction': 'diagonal-fractions',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  'stacked-fractions': {
+    output: {
+      '--tw-numeric-fraction': 'stacked-fractions',
+      fontVariantNumeric: cssFontVariantNumericValue
+    }
+  },
+  // https://tailwindcss.com/docs/line-height
+  leading: {
+    property: 'lineHeight',
+    config: 'lineHeight'
+  },
+  // https://tailwindcss.com/docs/letter-spacing
+  tracking: {
+    property: 'letterSpacing',
+    config: 'letterSpacing',
+    supportsNegativeValues: true
+  },
+  text: [// https://tailwindcss.com/docs/text-color
+  {
+    config: 'textColor',
+    coerced: {
+      color: {
+        property: 'color',
+        variable: '--tw-text-opacity'
+      }
+    }
+  }, // https://tailwindcss.com/docs/font-size
+  {
+    config: 'fontSize',
+    coerced: {
+      'absolute-size': {
+        property: 'fontSize'
+      },
+      'relative-size': {
+        property: 'fontSize'
+      },
+      length: {
+        property: 'fontSize'
+      },
+      percentage: {
+        property: 'fontSize'
+      }
+    }
+  }],
+  'text-opacity': {
+    property: '--tw-text-opacity',
+    config: 'textOpacity'
+  },
+  // https://tailwindcss.com/docs/text-decoration
+  underline: {
+    output: {
+      textDecorationLine: 'underline'
+    }
+  },
+  overline: {
+    output: {
+      textDecorationLine: 'overline'
+    }
+  },
+  'line-through': {
+    output: {
+      textDecorationLine: 'line-through'
+    }
+  },
+  'no-underline': {
+    output: {
+      textDecorationLine: 'none'
+    }
+  },
+  decoration: [// https://tailwindcss.com/docs/text-decoration-color
+  {
+    config: 'textDecorationColor',
+    coerced: {
+      color: {
+        property: 'textDecorationColor'
+      }
+    }
+  }, // https://tailwindcss.com/docs/text-decoration-thickness
+  {
+    config: 'textDecorationThickness',
+    coerced: {
+      length: {
+        property: 'textDecorationThickness'
+      },
+      percentage: {
+        property: 'textDecorationThickness'
+      },
+      any: {
+        property: 'textDecorationThickness'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/text-decoration-style
+  'decoration-solid': {
+    output: {
+      textDecorationStyle: 'solid'
+    }
+  },
+  'decoration-double': {
+    output: {
+      textDecorationStyle: 'double'
+    }
+  },
+  'decoration-dotted': {
+    output: {
+      textDecorationStyle: 'dotted'
+    }
+  },
+  'decoration-dashed': {
+    output: {
+      textDecorationStyle: 'dashed'
+    }
+  },
+  'decoration-wavy': {
+    output: {
+      textDecorationStyle: 'wavy'
+    }
+  },
+  // https://tailwindcss.com/docs/text-underline-offset
+  'underline-offset': {
+    config: 'textUnderlineOffset',
+    coerced: {
+      length: {
+        property: 'textUnderlineOffset'
+      },
+      percentage: {
+        property: 'textUnderlineOffset'
+      }
+    }
+  },
+  // https://tailwindcss.com/docs/font-smoothing
+  antialiased: {
+    output: {
+      WebkitFontSmoothing: 'antialiased',
+      MozOsxFontSmoothing: 'grayscale'
+    }
+  },
+  'subpixel-antialiased': {
+    output: {
+      WebkitFontSmoothing: 'auto',
+      MozOsxFontSmoothing: 'auto'
+    }
+  },
+  // https://tailwindcss.com/docs/placeholder-color
+  placeholder: {
+    config: 'placeholderColor',
+    coerced: {
+      color: {
+        property: 'color',
+        variable: '--tw-placeholder-opacity',
+        wrapWith: '::placeholder'
+      },
+      any: {
+        property: 'color',
+        wrapWith: '::placeholder'
+      }
+    }
+  },
+  // https://tailwindcss.com/docs/placeholder-opacity
+  'placeholder-opacity': {
+    config: 'placeholderOpacity',
+    output: ({
+      value
+    }) => ({
+      '::placeholder': {
+        '--tw-placeholder-opacity': value
+      }
+    })
+  },
+  // https://tailwindcss.com/docs/caret-color
+  caret: {
+    config: 'caretColor',
+    coerced: {
+      color: {
+        property: 'caretColor'
+      },
+      any: {
+        property: 'caretColor'
+      }
+    }
+  },
+  // https://tailwindcss.com/docs/accent-color
+  accent: {
+    config: 'accentColor',
+    coerced: {
+      color: {
+        property: 'accentColor'
+      },
+      any: {
+        property: 'accentColor'
+      }
+    }
+  },
   // https://tailwindcss.com/docs/opacity
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Filters
-   */
-  // https://tailwindcss.com/docs/filter
-  'filter-none': {
-    output: {
-      filter: 'none'
-    }
-  },
-  filter: {
-    output: {
-      filter: 'var(--tw-filter)'
-    }
-  },
-  // https://tailwindcss.com/docs/blur
-  // https://tailwindcss.com/docs/brightness
-  // https://tailwindcss.com/docs/contrast
-  // https://tailwindcss.com/docs/drop-shadow
-  // https://tailwindcss.com/docs/grayscale
-  // https://tailwindcss.com/docs/hue-rotate
-  // https://tailwindcss.com/docs/invert
-  // https://tailwindcss.com/docs/saturate
-  // https://tailwindcss.com/docs/sepia
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/backdrop-filter
-  'backdrop-filter-none': {
-    output: {
-      backdropFilter: 'none'
-    }
-  },
-  'backdrop-filter': {
-    output: {
-      backdropFilter: 'var(--tw-backdrop-filter)'
-    }
-  },
-  // https://tailwindcss.com/docs/backdrop-blur
-  // https://tailwindcss.com/docs/backdrop-brightness
-  // https://tailwindcss.com/docs/backdrop-contrast
-  // https://tailwindcss.com/docs/backdrop-grayscale
-  // https://tailwindcss.com/docs/backdrop-hue-rotate
-  // https://tailwindcss.com/docs/backdrop-invert
-  // https://tailwindcss.com/docs/backdrop-opacity
-  // https://tailwindcss.com/docs/backdrop-saturate
-  // https://tailwindcss.com/docs/backdrop-sepia
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Tables
-   */
-  // https://tailwindcss.com/docs/border-collapse
-  'border-collapse': {
-    output: {
-      borderCollapse: 'collapse'
-    }
-  },
-  'border-separate': {
-    output: {
-      borderCollapse: 'separate'
-    }
-  },
-  // https://tailwindcss.com/docs/table-layout
-  'table-auto': {
-    output: {
-      tableLayout: 'auto'
-    }
-  },
-  'table-fixed': {
-    output: {
-      tableLayout: 'fixed'
-    }
-  },
-
-  /**
-   * ===========================================
-   * Effects
-   */
-  // https://tailwindcss.com/docs/box-shadow/
-  // https://tailwindcss.com/docs/opacity
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/mix-blend-mode
-  'mix-blend-normal': {
-    output: {
-      mixBlendMode: 'normal'
-    }
-  },
-  'mix-blend-multiply': {
-    output: {
-      mixBlendMode: 'multiply'
-    }
-  },
-  'mix-blend-screen': {
-    output: {
-      mixBlendMode: 'screen'
-    }
-  },
-  'mix-blend-overlay': {
-    output: {
-      mixBlendMode: 'overlay'
-    }
-  },
-  'mix-blend-darken': {
-    output: {
-      mixBlendMode: 'darken'
-    }
-  },
-  'mix-blend-lighten': {
-    output: {
-      mixBlendMode: 'lighten'
-    }
-  },
-  'mix-blend-color-dodge': {
-    output: {
-      mixBlendMode: 'color-dodge'
-    }
-  },
-  'mix-blend-color-burn': {
-    output: {
-      mixBlendMode: 'color-burn'
-    }
-  },
-  'mix-blend-hard-light': {
-    output: {
-      mixBlendMode: 'hard-light'
-    }
-  },
-  'mix-blend-soft-light': {
-    output: {
-      mixBlendMode: 'soft-light'
-    }
-  },
-  'mix-blend-difference': {
-    output: {
-      mixBlendMode: 'difference'
-    }
-  },
-  'mix-blend-exclusion': {
-    output: {
-      mixBlendMode: 'exclusion'
-    }
-  },
-  'mix-blend-hue': {
-    output: {
-      mixBlendMode: 'hue'
-    }
-  },
-  'mix-blend-saturation': {
-    output: {
-      mixBlendMode: 'saturation'
-    }
-  },
-  'mix-blend-color': {
-    output: {
-      mixBlendMode: 'color'
-    }
-  },
-  'mix-blend-luminosity': {
-    output: {
-      mixBlendMode: 'luminosity'
-    }
+  opacity: {
+    property: 'opacity',
+    config: 'opacity'
   },
   // https://tailwindcss.com/docs/background-blend-mode
   'bg-blend-normal': {
@@ -2981,421 +3079,505 @@ var staticStyles = {
       backgroundBlendMode: 'luminosity'
     }
   },
+  // https://tailwindcss.com/docs/mix-blend-mode
+  'mix-blend-normal': {
+    output: {
+      mixBlendMode: 'normal'
+    }
+  },
+  'mix-blend-multiply': {
+    output: {
+      mixBlendMode: 'multiply'
+    }
+  },
+  'mix-blend-screen': {
+    output: {
+      mixBlendMode: 'screen'
+    }
+  },
+  'mix-blend-overlay': {
+    output: {
+      mixBlendMode: 'overlay'
+    }
+  },
+  'mix-blend-darken': {
+    output: {
+      mixBlendMode: 'darken'
+    }
+  },
+  'mix-blend-lighten': {
+    output: {
+      mixBlendMode: 'lighten'
+    }
+  },
+  'mix-blend-color-dodge': {
+    output: {
+      mixBlendMode: 'color-dodge'
+    }
+  },
+  'mix-blend-color-burn': {
+    output: {
+      mixBlendMode: 'color-burn'
+    }
+  },
+  'mix-blend-hard-light': {
+    output: {
+      mixBlendMode: 'hard-light'
+    }
+  },
+  'mix-blend-soft-light': {
+    output: {
+      mixBlendMode: 'soft-light'
+    }
+  },
+  'mix-blend-difference': {
+    output: {
+      mixBlendMode: 'difference'
+    }
+  },
+  'mix-blend-exclusion': {
+    output: {
+      mixBlendMode: 'exclusion'
+    }
+  },
+  'mix-blend-hue': {
+    output: {
+      mixBlendMode: 'hue'
+    }
+  },
+  'mix-blend-saturation': {
+    output: {
+      mixBlendMode: 'saturation'
+    }
+  },
+  'mix-blend-color': {
+    output: {
+      mixBlendMode: 'color'
+    }
+  },
+  'mix-blend-luminosity': {
+    output: {
+      mixBlendMode: 'luminosity'
+    }
+  },
+  shadow: [// https://tailwindcss.com/docs/box-shadow
+  {
+    config: 'boxShadow',
+    coerced: {
+      shadow: {
+        config: 'boxShadow'
+      }
+    }
+  }, // https://tailwindcss.com/docs/box-shadow-color
+  {
+    config: 'boxShadowColor',
+    coerced: {
+      color: {
+        output: (value, {
+          withAlpha
+        }) => ({
+          '--tw-shadow-color': withAlpha(value) || value,
+          '--tw-shadow': 'var(--tw-shadow-colored)'
+        })
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/outline-style
+  'outline-none': {
+    output: {
+      outline: '2px solid transparent',
+      outlineOffset: '2px'
+    }
+  },
+  'outline-dashed': {
+    output: {
+      outlineStyle: 'dashed'
+    }
+  },
+  'outline-dotted': {
+    output: {
+      outlineStyle: 'dotted'
+    }
+  },
+  'outline-double': {
+    output: {
+      outlineStyle: 'double'
+    }
+  },
+  'outline-hidden': {
+    output: {
+      outlineStyle: 'hidden'
+    }
+  },
+  outline: [{
+    output: {
+      outlineStyle: 'solid'
+    }
+  }, // https://tailwindcss.com/docs/outline-width
+  {
+    config: 'outlineWidth',
+    coerced: {
+      length: {
+        property: 'outlineWidth'
+      },
+      number: {
+        property: 'outlineWidth'
+      },
+      percentage: {
+        property: 'outlineWidth'
+      }
+    }
+  }, // https://tailwindcss.com/docs/outline-color
+  {
+    config: 'outlineColor',
+    coerced: {
+      color: {
+        property: 'outlineColor'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/outline-offset
+  'outline-offset': {
+    config: 'outlineOffset',
+    coerced: {
+      length: {
+        property: 'outlineOffset'
+      },
+      number: {
+        property: 'outlineOffset'
+      },
+      percentage: {
+        property: 'outlineOffset'
+      }
+    }
+  },
+  ring: [// https://tailwindcss.com/docs/ring-width
+  {
+    config: 'ringWidth',
+    coerced: {
+      length: value => ({
+        '--tw-ring-offset-shadow': 'var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)',
+        '--tw-ring-shadow': `var(--tw-ring-inset) 0 0 0 calc(${value} + var(--tw-ring-offset-width)) var(--tw-ring-color)`,
+        boxShadow: [`var(--tw-ring-offset-shadow)`, `var(--tw-ring-shadow)`, `var(--tw-shadow, 0 0 #0000)`].join(', ')
+      })
+    }
+  }, // https://tailwindcss.com/docs/ring-color
+  {
+    config: 'ringColor',
+    coerced: {
+      color: {
+        property: '--tw-ring-color',
+        variable: '--tw-ring-opacity'
+      }
+    }
+  }],
+  'ring-inset': {
+    output: {
+      '--tw-ring-inset': 'inset'
+    }
+  },
+  // https://tailwindcss.com/docs/ring-opacity
+  'ring-opacity': {
+    property: '--tw-ring-opacity',
+    config: 'ringOpacity'
+  },
+  'ring-offset': [// https://tailwindcss.com/docs/ring-offset-width
+  {
+    config: 'ringOffsetWidth',
+    coerced: {
+      length: {
+        property: '--tw-ring-offset-width'
+      }
+    }
+  }, // https://tailwindcss.com/docs/ring-offset-color
+  {
+    config: 'ringOffsetColor',
+    coerced: {
+      color: {
+        property: '--tw-ring-offset-color'
+      }
+    }
+  }],
+  // https://tailwindcss.com/docs/blur
+  blur: {
+    config: 'blur',
+    output: ({
+      value
+    }) => ({
+      '--tw-blur': `blur(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/brightness
+  brightness: {
+    config: 'brightness',
+    output: ({
+      value
+    }) => ({
+      '--tw-brightness': `brightness(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/contrast
+  contrast: {
+    config: 'contrast',
+    output: ({
+      value
+    }) => ({
+      '--tw-contrast': `contrast(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/drop-shadow
+  'drop-shadow': {
+    config: 'dropShadow',
 
-  /**
-   * ===========================================
-   * Transitions
-   */
-  // https://tailwindcss.com/docs/transition-property
+    output({
+      value
+    }) {
+      const dropShadowValue = Array.isArray(value) ? value.map(v => `drop-shadow(${v})`).join(' ') : `drop-shadow(${value})`;
+      return {
+        '--tw-drop-shadow': dropShadowValue,
+        filter: cssFilterValue
+      };
+    }
+
+  },
+  // https://tailwindcss.com/docs/grayscale
+  grayscale: {
+    config: 'grayscale',
+    output: ({
+      value
+    }) => ({
+      '--tw-grayscale': `grayscale(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/hue-rotate
+  'hue-rotate': {
+    config: 'hueRotate',
+    output: ({
+      value
+    }) => ({
+      '--tw-hue-rotate': `hue-rotate(${value})`,
+      filter: cssFilterValue
+    }),
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/invert
+  invert: {
+    config: 'invert',
+    output: ({
+      value
+    }) => ({
+      '--tw-invert': `invert(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/saturate
+  saturate: {
+    config: 'saturate',
+    output: ({
+      value
+    }) => ({
+      '--tw-saturate': `saturate(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/sepia
+  sepia: {
+    config: 'sepia',
+    output: ({
+      value
+    }) => ({
+      '--tw-sepia': `sepia(${value})`,
+      filter: cssFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/filter
+  'filter-none': {
+    output: {
+      filter: 'none'
+    }
+  },
+  filter: {
+    output: {
+      filter: cssFilterValue
+    }
+  },
+  // https://tailwindcss.com/docs/backdrop-blur
+  'backdrop-blur': {
+    config: 'backdropBlur',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-blur': `blur(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-brightness
+  'backdrop-brightness': {
+    config: 'backdropBrightness',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-brightness': `brightness(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-contrast
+  'backdrop-contrast': {
+    config: 'backdropContrast',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-contrast': `contrast(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-grayscale
+  'backdrop-grayscale': {
+    config: 'backdropGrayscale',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-grayscale': `grayscale(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-hue-rotate
+  'backdrop-hue-rotate': {
+    config: 'backdropHueRotate',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-hue-rotate': `hue-rotate(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    }),
+    supportsNegativeValues: true
+  },
+  // https://tailwindcss.com/docs/backdrop-invert
+  'backdrop-invert': {
+    config: 'backdropInvert',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-invert': `invert(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-opacity
+  'backdrop-opacity': {
+    config: 'backdropOpacity',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-opacity': `opacity(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-saturate
+  'backdrop-saturate': {
+    config: 'backdropSaturate',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-saturate': `saturate(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-sepia
+  'backdrop-sepia': {
+    config: 'backdropSepia',
+    output: ({
+      value
+    }) => ({
+      '--tw-backdrop-sepia': `sepia(${value})`,
+      backdropFilter: cssBackdropFilterValue
+    })
+  },
+  // https://tailwindcss.com/docs/backdrop-filter
+  'backdrop-filter': {
+    output: {
+      backdropFilter: cssBackdropFilterValue
+    }
+  },
+  'backdrop-filter-none': {
+    output: {
+      backdropFilter: 'none'
+    }
+  },
+  // https://tailwindcss.com/docs/transtiion-property
+  // Note: Tailwind doesn't allow an arbitrary value but it's likely just an accident so it's been added here
+  transition: [{
+    config: 'transitionProperty',
+
+    output({
+      value,
+      theme
+    }) {
+      const defaultTimingFunction = theme('transitionTimingFunction.DEFAULT');
+      const defaultDuration = theme('transitionDuration.DEFAULT');
+      return _extends({
+        transitionProperty: value
+      }, value === 'none' ? {} : {
+        transitionTimingFunction: defaultTimingFunction,
+        transitionDuration: defaultDuration
+      });
+    },
+
+    coerced: {
+      lookup: (value, theme) => ({
+        transitionProperty: value,
+        transitionTimingFunction: theme('transitionTimingFunction.DEFAULT'),
+        transitionDuration: theme('transitionDuration.DEFAULT')
+      })
+    }
+  }],
+  // https://tailwindcss.com/docs/transition-delay
+  delay: {
+    property: 'transitionDelay',
+    config: 'transitionDelay'
+  },
   // https://tailwindcss.com/docs/transition-duration
+  duration: {
+    property: 'transitionDuration',
+    config: 'transitionDuration'
+  },
   // https://tailwindcss.com/docs/transition-timing-function
-  // See dynamicStyles.js
+  ease: {
+    property: 'transitionTimingFunction',
+    config: 'transitionTimingFunction'
+  },
+  // https://tailwindcss.com/docs/will-change
+  'will-change': {
+    property: 'willChange',
+    config: 'willChange'
+  },
+  // https://tailwindcss.com/docs/content
+  content: [{
+    config: 'content',
 
-  /**
-   * ===========================================
-   * Transforms
-   */
-  // https://tailwindcss.com/docs/scale
-  // https://tailwindcss.com/docs/rotate
-  // https://tailwindcss.com/docs/translate
-  // https://tailwindcss.com/docs/skew
-  // https://tailwindcss.com/docs/transform-origin
-  // See dynamicStyles.js
+    output({
+      value,
+      isEmotion
+    }) {
+      // Temp fix until emotion supports css variables with the content property
+      if (isEmotion) return {
+        content: value
+      };
+      return {
+        '--tw-content': value,
+        content: 'var(--tw-content)'
+      };
+    }
 
-  /**
-   * ===========================================
-   * Interactivity
-   */
-  // https://tailwindcss.com/docs/appearance
-  'appearance-none': {
+  }, {
     output: {
-      appearance: 'none'
+      content: '""'
     }
-  },
-  // https://tailwindcss.com/docs/cursor
-  // https://tailwindcss.com/docs/outline
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/pointer-events
-  'pointer-events-none': {
-    output: {
-      pointerEvents: 'none'
-    }
-  },
-  'pointer-events-auto': {
-    output: {
-      pointerEvents: 'auto'
-    }
-  },
-  // https://tailwindcss.com/docs/resize
-  'resize-none': {
-    output: {
-      resize: 'none'
-    }
-  },
-  'resize-y': {
-    output: {
-      resize: 'vertical'
-    }
-  },
-  'resize-x': {
-    output: {
-      resize: 'horizontal'
-    }
-  },
-  resize: {
-    output: {
-      resize: 'both'
-    }
-  },
-  // https://tailwindcss.com/docs/scroll-behavior
-  'scroll-auto': {
-    output: {
-      scrollBehavior: 'auto'
-    }
-  },
-  'scroll-smooth': {
-    output: {
-      scrollBehavior: 'smooth'
-    }
-  },
-  // https://tailwindcss.com/docs/scroll-margin
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/scroll-padding
-  // See dynamicStyles.js
-  // https://tailwindcss.com/docs/scroll-snap-align
-  'snap-start': {
-    output: {
-      scrollSnapAlign: 'start'
-    }
-  },
-  'snap-end': {
-    output: {
-      scrollSnapAlign: 'end'
-    }
-  },
-  'snap-center': {
-    output: {
-      scrollSnapAlign: 'center'
-    }
-  },
-  'snap-align-none': {
-    output: {
-      scrollSnapAlign: 'none'
-    }
-  },
-  // https://tailwindcss.com/docs/scroll-snap-stop
-  'snap-normal': {
-    output: {
-      scrollSnapStop: 'normal'
-    }
-  },
-  'snap-always': {
-    output: {
-      scrollSnapStop: 'always'
-    }
-  },
-  // https://tailwindcss.com/docs/scroll-snap-type
-  'snap-none': {
-    output: {
-      scrollSnapType: 'none'
-    }
-  },
-  'snap-x': {
-    output: {
-      scrollSnapType: 'x var(--tw-scroll-snap-strictness)'
-    }
-  },
-  'snap-y': {
-    output: {
-      scrollSnapType: 'y var(--tw-scroll-snap-strictness)'
-    }
-  },
-  'snap-both': {
-    output: {
-      scrollSnapType: 'both var(--tw-scroll-snap-strictness)'
-    }
-  },
-  'snap-mandatory': {
-    output: {
-      '--tw-scroll-snap-strictness': 'mandatory'
-    }
-  },
-  'snap-proximity': {
-    output: {
-      '--tw-scroll-snap-strictness': 'proximity'
-    }
-  },
-  // https://tailwindcss.com/docs/user-select
-  'select-none': {
-    output: {
-      userSelect: 'none'
-    }
-  },
-  'select-text': {
-    output: {
-      userSelect: 'text'
-    }
-  },
-  'select-all': {
-    output: {
-      userSelect: 'all'
-    }
-  },
-  'select-auto': {
-    output: {
-      userSelect: 'auto'
-    }
-  },
-
-  /**
-   * ===========================================
-   * Svg
-   */
-  // https://tailwindcss.com/docs/fill
-  // https://tailwindcss.com/docs/stroke
-  // https://tailwindcss.com/docs/stroke
-  // See dynamicStyles.js
-
-  /**
-   * ===========================================
-   * Accessibility
-   */
-  // https://tailwindcss.com/docs/screen-readers
-  'sr-only': {
-    output: {
-      position: 'absolute',
-      width: '1px',
-      height: '1px',
-      padding: '0',
-      margin: '-1px',
-      overflow: 'hidden',
-      clip: 'rect(0, 0, 0, 0)',
-      whiteSpace: 'nowrap',
-      borderWidth: '0'
-    },
-    config: 'accessibility'
-  },
-  'not-sr-only': {
-    output: {
-      position: 'static',
-      width: 'auto',
-      height: 'auto',
-      padding: '0',
-      margin: '0',
-      overflow: 'visible',
-      clip: 'auto',
-      whiteSpace: 'normal'
-    },
-    config: 'accessibility'
-  },
-  // Overscroll
-  'overscroll-auto': {
-    output: {
-      overscrollBehavior: 'auto'
-    }
-  },
-  'overscroll-contain': {
-    output: {
-      overscrollBehavior: 'contain'
-    }
-  },
-  'overscroll-none': {
-    output: {
-      overscrollBehavior: 'none'
-    }
-  },
-  'overscroll-y-auto': {
-    output: {
-      overscrollBehaviorY: 'auto'
-    }
-  },
-  'overscroll-y-contain': {
-    output: {
-      overscrollBehaviorY: 'contain'
-    }
-  },
-  'overscroll-y-none': {
-    output: {
-      overscrollBehaviorY: 'none'
-    }
-  },
-  'overscroll-x-auto': {
-    output: {
-      overscrollBehaviorX: 'auto'
-    }
-  },
-  'overscroll-x-contain': {
-    output: {
-      overscrollBehaviorX: 'contain'
-    }
-  },
-  'overscroll-x-none': {
-    output: {
-      overscrollBehaviorX: 'none'
-    }
-  },
-  // Grid alignment utilities
-  // https://github.com/tailwindlabs/tailwindcss/pull/2306
-  'justify-items-auto': {
-    output: {
-      justifyItems: 'auto'
-    }
-  },
-  'justify-items-start': {
-    output: {
-      justifyItems: 'start'
-    }
-  },
-  'justify-items-end': {
-    output: {
-      justifyItems: 'end'
-    }
-  },
-  'justify-items-center': {
-    output: {
-      justifyItems: 'center'
-    }
-  },
-  'justify-items-stretch': {
-    output: {
-      justifyItems: 'stretch'
-    }
-  },
-  'justify-self-auto': {
-    output: {
-      justifySelf: 'auto'
-    }
-  },
-  'justify-self-start': {
-    output: {
-      justifySelf: 'start'
-    }
-  },
-  'justify-self-end': {
-    output: {
-      justifySelf: 'end'
-    }
-  },
-  'justify-self-center': {
-    output: {
-      justifySelf: 'center'
-    }
-  },
-  'justify-self-stretch': {
-    output: {
-      justifySelf: 'stretch'
-    }
-  },
-  'place-content-center': {
-    output: {
-      placeContent: 'center'
-    }
-  },
-  'place-content-start': {
-    output: {
-      placeContent: 'start'
-    }
-  },
-  'place-content-end': {
-    output: {
-      placeContent: 'end'
-    }
-  },
-  'place-content-between': {
-    output: {
-      placeContent: 'space-between'
-    }
-  },
-  'place-content-around': {
-    output: {
-      placeContent: 'space-around'
-    }
-  },
-  'place-content-evenly': {
-    output: {
-      placeContent: 'space-evenly'
-    }
-  },
-  'place-content-stretch': {
-    output: {
-      placeContent: 'stretch'
-    }
-  },
-  'place-items-auto': {
-    output: {
-      placeItems: 'auto'
-    }
-  },
-  'place-items-start': {
-    output: {
-      placeItems: 'start'
-    }
-  },
-  'place-items-end': {
-    output: {
-      placeItems: 'end'
-    }
-  },
-  'place-items-center': {
-    output: {
-      placeItems: 'center'
-    }
-  },
-  'place-items-stretch': {
-    output: {
-      placeItems: 'stretch'
-    }
-  },
-  'place-self-auto': {
-    output: {
-      placeSelf: 'auto'
-    }
-  },
-  'place-self-start': {
-    output: {
-      placeSelf: 'start'
-    }
-  },
-  'place-self-end': {
-    output: {
-      placeSelf: 'end'
-    }
-  },
-  'place-self-center': {
-    output: {
-      placeSelf: 'center'
-    }
-  },
-  'place-self-stretch': {
-    output: {
-      placeSelf: 'stretch'
-    }
-  },
-
-  /**
-   * ===========================================
-   * Special classes
-   */
-  transform: {
-    output: {
-      transform: 'var(--tw-transform)'
-    }
-  },
-  'transform-gpu': {
-    output: {
-      '--tw-transform': 'translate3d(var(--tw-translate-x), var(--tw-translate-y), 0) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
-    }
-  },
-  'transform-cpu': {
-    output: {
-      '--tw-transform': 'translateX(var(--tw-translate-x)) translateY(var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))'
-    }
-  },
-  'transform-none': {
-    output: {
-      transform: 'none'
-    }
-  }
+  } // Deprecated (keep last in array here)
+  ]
 };
 
 /**
@@ -3405,13 +3587,12 @@ var staticStyles = {
  * See MDN web docs for more information
  * https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
  */
-var variantConfig = function (ref) {
-  var variantDarkMode = ref.variantDarkMode;
-  var variantLightMode = ref.variantLightMode;
-  var prefixDarkLightModeClass = ref.prefixDarkLightModeClass;
-  var createPeer = ref.createPeer;
-
-  return ({
+const variantConfig = ({
+  variantDarkMode,
+  variantLightMode,
+  prefixDarkLightModeClass,
+  createPeer
+}) => ({
   // Before/after pseudo elements
   // Usage: tw`before:(block w-10 h-10 bg-black)`
   before: ':before',
@@ -3478,37 +3659,37 @@ var variantConfig = function (ref) {
   // Group states
   // You'll need to add className="group" to an ancestor to make these work
   // https://github.com/ben-rogerson/twin.macro/blob/master/docs/group.md
-  'group-hocus': function (variantData) { return prefixDarkLightModeClass('.group:hover &, .group:focus &', variantData); },
-  'group-first': function (variantData) { return prefixDarkLightModeClass('.group:first-child &', variantData); },
-  'group-last': function (variantData) { return prefixDarkLightModeClass('.group:last-child &', variantData); },
-  'group-only': function (variantData) { return prefixDarkLightModeClass('.group:only-child &', variantData); },
-  'group-even': function (variantData) { return prefixDarkLightModeClass('.group:nth-child(even) &', variantData); },
-  'group-odd': function (variantData) { return prefixDarkLightModeClass('.group:nth-child(odd) &', variantData); },
-  'group-first-of-type': function (variantData) { return prefixDarkLightModeClass('.group:first-of-type &', variantData); },
-  'group-last-of-type': function (variantData) { return prefixDarkLightModeClass('.group:last-of-type &', variantData); },
-  'group-only-of-type': function (variantData) { return prefixDarkLightModeClass('.group:not(:first-of-type) &', variantData); },
-  'group-hover': function (variantData) { return prefixDarkLightModeClass('.group:hover &', variantData); },
-  'group-focus': function (variantData) { return prefixDarkLightModeClass('.group:focus &', variantData); },
-  'group-disabled': function (variantData) { return prefixDarkLightModeClass('.group:disabled &', variantData); },
-  'group-active': function (variantData) { return prefixDarkLightModeClass('.group:active &', variantData); },
-  'group-target': function (variantData) { return prefixDarkLightModeClass('.group:target &', variantData); },
-  'group-visited': function (variantData) { return prefixDarkLightModeClass('.group:visited &', variantData); },
-  'group-default': function (variantData) { return prefixDarkLightModeClass('.group:default &', variantData); },
-  'group-checked': function (variantData) { return prefixDarkLightModeClass('.group:checked &', variantData); },
-  'group-indeterminate': function (variantData) { return prefixDarkLightModeClass('.group:indeterminate &', variantData); },
-  'group-placeholder-shown': function (variantData) { return prefixDarkLightModeClass('.group:placeholder-shown &', variantData); },
-  'group-autofill': function (variantData) { return prefixDarkLightModeClass('.group:autofill &', variantData); },
-  'group-focus-within': function (variantData) { return prefixDarkLightModeClass('.group:focus-within &', variantData); },
-  'group-focus-visible': function (variantData) { return prefixDarkLightModeClass('.group:focus-visible &', variantData); },
-  'group-required': function (variantData) { return prefixDarkLightModeClass('.group:required &', variantData); },
-  'group-valid': function (variantData) { return prefixDarkLightModeClass('.group:valid &', variantData); },
-  'group-invalid': function (variantData) { return prefixDarkLightModeClass('.group:invalid &', variantData); },
-  'group-in-range': function (variantData) { return prefixDarkLightModeClass('.group:in-range &', variantData); },
-  'group-out-of-range': function (variantData) { return prefixDarkLightModeClass('.group:out-of-range &', variantData); },
-  'group-read-only': function (variantData) { return prefixDarkLightModeClass('.group:read-only &', variantData); },
-  'group-empty': function (variantData) { return prefixDarkLightModeClass('.group:empty &', variantData); },
-  'group-open': function (variantData) { return prefixDarkLightModeClass('.group:open &', variantData); },
-  'group-not-open': function (variantData) { return prefixDarkLightModeClass('.group:not(:open) &', variantData); },
+  'group-hocus': variantData => prefixDarkLightModeClass('.group:hover &, .group:focus &', variantData),
+  'group-first': variantData => prefixDarkLightModeClass('.group:first-child &', variantData),
+  'group-last': variantData => prefixDarkLightModeClass('.group:last-child &', variantData),
+  'group-only': variantData => prefixDarkLightModeClass('.group:only-child &', variantData),
+  'group-even': variantData => prefixDarkLightModeClass('.group:nth-child(even) &', variantData),
+  'group-odd': variantData => prefixDarkLightModeClass('.group:nth-child(odd) &', variantData),
+  'group-first-of-type': variantData => prefixDarkLightModeClass('.group:first-of-type &', variantData),
+  'group-last-of-type': variantData => prefixDarkLightModeClass('.group:last-of-type &', variantData),
+  'group-only-of-type': variantData => prefixDarkLightModeClass('.group:not(:first-of-type) &', variantData),
+  'group-hover': variantData => prefixDarkLightModeClass('.group:hover &', variantData),
+  'group-focus': variantData => prefixDarkLightModeClass('.group:focus &', variantData),
+  'group-disabled': variantData => prefixDarkLightModeClass('.group:disabled &', variantData),
+  'group-active': variantData => prefixDarkLightModeClass('.group:active &', variantData),
+  'group-target': variantData => prefixDarkLightModeClass('.group:target &', variantData),
+  'group-visited': variantData => prefixDarkLightModeClass('.group:visited &', variantData),
+  'group-default': variantData => prefixDarkLightModeClass('.group:default &', variantData),
+  'group-checked': variantData => prefixDarkLightModeClass('.group:checked &', variantData),
+  'group-indeterminate': variantData => prefixDarkLightModeClass('.group:indeterminate &', variantData),
+  'group-placeholder-shown': variantData => prefixDarkLightModeClass('.group:placeholder-shown &', variantData),
+  'group-autofill': variantData => prefixDarkLightModeClass('.group:autofill &', variantData),
+  'group-focus-within': variantData => prefixDarkLightModeClass('.group:focus-within &', variantData),
+  'group-focus-visible': variantData => prefixDarkLightModeClass('.group:focus-visible &', variantData),
+  'group-required': variantData => prefixDarkLightModeClass('.group:required &', variantData),
+  'group-valid': variantData => prefixDarkLightModeClass('.group:valid &', variantData),
+  'group-invalid': variantData => prefixDarkLightModeClass('.group:invalid &', variantData),
+  'group-in-range': variantData => prefixDarkLightModeClass('.group:in-range &', variantData),
+  'group-out-of-range': variantData => prefixDarkLightModeClass('.group:out-of-range &', variantData),
+  'group-read-only': variantData => prefixDarkLightModeClass('.group:read-only &', variantData),
+  'group-empty': variantData => prefixDarkLightModeClass('.group:empty &', variantData),
+  'group-open': variantData => prefixDarkLightModeClass('.group:open &', variantData),
+  'group-not-open': variantData => prefixDarkLightModeClass('.group:not(:open) &', variantData),
   // Media types
   print: '@media print',
   screen: '@media screen',
@@ -3575,12 +3756,137 @@ var variantConfig = function (ref) {
   // Lists
   marker: '::marker, *::marker'
 });
+
+const color = {
+  error: chalk__default["default"].hex('#ff8383'),
+  errorLight: chalk__default["default"].hex('#ffd3d3'),
+  success: chalk__default["default"].greenBright,
+  highlight: chalk__default["default"].yellowBright,
+  highlight2: chalk__default["default"].blue,
+  subdued: chalk__default["default"].hex('#999'),
+  hex: hex => chalk__default["default"].hex(hex)
 };
 
-function objectWithoutProperties (obj, exclude) { var target = {}; for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k) && exclude.indexOf(k) === -1) target[k] = obj[k]; return target; }
+const spaced = string => `\n\n${string}\n`;
 
-var getCustomSuggestions = function (className) {
-  var suggestions = {
+const warning = string => color.error(`✕ ${string}`);
+
+const inOutPlugins = (input, output, layer) => `${layer} ${color.highlight2('→')} ${input} ${color.highlight2(JSON.stringify(output))}`;
+
+const inOut = (input, output) => `${color.success('✓')} ${input} ${color.success(JSON.stringify(output))}`;
+
+const logNoVariant = (variant, validVariants) => spaced(`${warning(`The variant ${color.errorLight(`${variant}:`)} was not found`)}\n\n${Object.entries(validVariants).map(([k, v]) => `${k}\n${v.map((item, index) => `${v.length > 6 && index % 6 === 0 && index > 0 ? '\n' : ''}${color.highlight(item)}:`).join(color.subdued(' / '))}`).join('\n\n')}\n\nRead more at https://twinredirect.page.link/variantList`);
+
+const logNotAllowed = (className, error, fix) => spaced([warning(`${color.errorLight(className)} ${error}`), fix ? typeof fix === 'function' ? fix(color) : fix : ''].filter(Boolean).join('\n\n'));
+
+const logBadGood = (bad, good) => good ? spaced(`${color.error('✕ Bad:')} ${typeof bad === 'function' ? bad(color) : bad}\n${color.success('✓ Good:')} ${typeof good === 'function' ? good(color) : good}`) : logGeneralError(bad);
+
+const logErrorFix = (error, good) => spaced(`${color.error(error)}\n${color.success('Fix:')} ${good}`);
+
+const logGeneralError = error => spaced(warning(error));
+
+const debugSuccess = (className, log) => inOut(formatProp(className), log);
+
+const formatPluginKey = key => key.replace(/(\\|(}}))/g, '').replace(/{{/g, '.');
+
+const debugPlugins = processedPlugins => {
+  console.log(Object.entries(processedPlugins).map(([layer, group]) => Object.entries(group).map(([className, styles]) => inOutPlugins(formatPluginKey(className), styles, layer)).join('\n')).join(`\n`));
+};
+
+const formatSuggestions = suggestions => suggestions.map(s => `${color.subdued('-')} ${color.highlight(s.target)}${s.value ? ` ${color.subdued('>')} ${isHex(s.value) ? color.hex(s.value)(`▣ `) : ''}${s.value}` : ''}`).join('\n');
+
+const logNoClass = properties => {
+  const {
+    pieces: {
+      classNameRawNoVariants
+    }
+  } = properties;
+  const text = warning(`${classNameRawNoVariants ? color.errorLight(classNameRawNoVariants) : 'Class'} was not found`);
+  return text;
+};
+
+const logDeeplyNestedClass = properties => {
+  const {
+    pieces: {
+      classNameRawNoVariants
+    }
+  } = properties;
+  const text = warning(`${classNameRawNoVariants ? color.errorLight(classNameRawNoVariants) : 'Class'} is too deeply nested in your tailwind.config.js`);
+  return text;
+};
+
+const checkDarkLightClasses = className => throwIf(['dark', 'light'].includes(className), () => `\n\n"${className}" must be added as className:${logBadGood(`tw\`${className}\``, `<div className="${className}">`)}\nRead more at https://twinredirect.page.link/darkLightMode\n`);
+
+const isHex = hex => /^#([\da-f]{3}){1,2}$/i.test(hex);
+
+const errorSuggestions = properties => {
+  const {
+    state: {
+      configTwin: {
+        hasSuggestions
+      },
+      config: {
+        prefix
+      }
+    },
+    pieces: {
+      className
+    },
+    isCsOnly
+  } = properties;
+  if (isCsOnly) return spaced(`${color.highlight(className)} isn’t valid “short css”.\n\nThe syntax is like this: max-width[100vw]\nRead more at https://twinredirect.page.link/cs-classes`);
+  checkDarkLightClasses(className);
+  const textNotFound = logNoClass(properties);
+  if (!hasSuggestions) return spaced(textNotFound);
+  const suggestions = getSuggestions$1(properties);
+  if (suggestions.length === 0) return spaced(textNotFound);
+
+  if (typeof suggestions === 'string') {
+    if (suggestions === className) return spaced(logDeeplyNestedClass(properties)); // Provide a suggestion for the default key update
+
+    if (suggestions.endsWith('-default')) return spaced(`${textNotFound}\n\n${color.highlight(`To fix this, rename the 'default' key to 'DEFAULT' in your tailwind config or use the class '${className}-default'`)}\nRead more at https://twinredirect.page.link/default-to-DEFAULT`);
+    return spaced(`${textNotFound}\n\nDid you mean ${color.highlight([prefix, suggestions].filter(Boolean).join(''))}?`);
+  }
+
+  const suggestion = [...suggestions].shift();
+  const suggestionText = suggestions.length === 1 ? `Did you mean ${color.highlight([prefix, suggestion.target].filter(Boolean).join(''))}?` : `Try one of these classes:\n\n${formatSuggestions(suggestions)}`;
+  return spaced(`${textNotFound}\n\n${suggestionText}`);
+};
+
+const themeErrorNotFound = ({
+  theme,
+  input,
+  trimInput
+}) => {
+  if (typeof theme === 'string') return logBadGood(input, trimInput);
+  const textNotFound = warning(`${color.errorLight(input)} was not found in your theme`);
+  if (!theme) return spaced(textNotFound);
+  const suggestionText = `Try one of these values:\n${formatSuggestions(Object.entries(theme).map(([k, v]) => ({
+    target: k.includes && k.includes('.') ? `[${k}]` : k,
+    value: typeof v === 'string' ? v : '...'
+  })))}`;
+  return spaced(`${textNotFound}\n\n${suggestionText}`);
+};
+
+const opacityErrorNotFound = ({
+  className
+}) => logBadGood(`The class \`${className}\` had an unsupported slash opacity`, `Remove the opacity from the end of the class`);
+
+const logNotFoundVariant = ({
+  classNameRaw
+}) => logBadGood(`${classNameRaw}`, [`${classNameRaw}flex`, `${classNameRaw}(flex bg-black)`].join(color.subdued(' / ')));
+
+const logNotFoundClass = logGeneralError('That class was not found');
+const logStylePropertyError = logErrorFix('Styles shouldn’t be added within a `style={...}` prop', 'Use the tw or css prop instead: <div tw="" /> or <div css={tw``} />\n\nDisable this error by adding this in your twin config: `{ "allowStyleProp": true }`\nRead more at https://twinredirect.page.link/style-prop');
+
+const debug = state => message => {
+  if (state.isDev !== true) return;
+  if (state.configTwin.debug !== true) return;
+  return console.log(message);
+};
+
+const getCustomSuggestions = className => {
+  const suggestions = {
     'flex-center': 'items-center / justify-center',
     'display-none': 'hidden',
     'display-inline': 'inline-block',
@@ -3593,17 +3899,15 @@ var getCustomSuggestions = function (className) {
     ellipsis: 'text-ellipsis',
     'flex-no-wrap': 'flex-nowrap'
   }[className];
-  if (suggestions) { return suggestions; }
+  if (suggestions) return suggestions;
 };
 
-var flattenObject = function (object, prefix) {
-  if ( prefix === void 0 ) prefix = '';
-
-  if (!object) { return {}; }
-  return Object.keys(object).reduce(function (result, k) {
-    var pre = prefix.length > 0 ? prefix + '-' : '';
-    var value = object[k];
-    var fullKey = pre + k;
+const flattenObject = (object, prefix = '') => {
+  if (!object) return {};
+  return Object.keys(object).reduce((result, k) => {
+    const pre = prefix.length > 0 ? prefix + '-' : '';
+    const value = object[k];
+    const fullKey = pre + k;
 
     if (Array.isArray(value)) {
       result[fullKey] = value;
@@ -3617,355 +3921,134 @@ var flattenObject = function (object, prefix) {
   }, {});
 };
 
-var targetTransforms = [function (ref) {
-  var target = ref.target;
-
-  return target === 'DEFAULT' ? '' : target;
-}, function (ref) {
-  var dynamicKey = ref.dynamicKey;
-  var target = ref.target;
-
-  var prefix = target !== stripNegative(target) ? '-' : '';
-  return ("" + prefix + ([dynamicKey, stripNegative(target)].filter(Boolean).join('-')));
+const targetTransforms = [({
+  target
+}) => target === 'DEFAULT' ? '' : target, ({
+  corePluginName,
+  target
+}) => {
+  const prefix = target !== stripNegative(target) ? '-' : '';
+  return `${prefix}${[corePluginName, stripNegative(target)].filter(Boolean).join('-')}`;
 }];
 
-var filterKeys = function (object, negativesOnly) { return Object.entries(object).reduce(function (result, ref) {
-  var obj;
+const filterKeys = (object, negativesOnly) => Object.entries(object).reduce((result, [k, v]) => _extends({}, result, (negativesOnly ? k.startsWith('-') : !k.startsWith('-')) && {
+  [k.replace('-DEFAULT', '')]: v
+}), {});
 
-  var k = ref[0];
-  var v = ref[1];
-  return (Object.assign({}, result,
-  ((negativesOnly ? k.startsWith('-') : !k.startsWith('-')) && ( obj = {}, obj[k.replace('-DEFAULT', '')] = v, obj ))));
-  }, {}); };
-
-var normalizeDynamicConfig = function (ref) {
-  var config = ref.config;
-  var input = ref.input;
-  var dynamicKey = ref.dynamicKey;
-  var hasNegative = ref.hasNegative;
-
-  var results = Object.entries(filterKeys(flattenObject(config), hasNegative)).map(function (ref) {
-    var target = ref[0];
-    var value = ref[1];
-
-    return (Object.assign({}, (input && {
-      rating: stringSimilarity.compareTwoStrings(("-" + target), input)
-    }),
-    {target: targetTransforms.reduce(function (result, transformer) { return transformer({
-      dynamicKey: dynamicKey,
+const normalizeCoreConfig = ({
+  config,
+  input,
+  corePluginName,
+  hasNegative
+}) => {
+  const results = Object.entries(filterKeys(flattenObject(config), hasNegative)).map(([target, value]) => _extends({}, input && {
+    rating: Number(stringSimilarity__default["default"].compareTwoStrings([corePluginName, target].join('-'), input))
+  }, {
+    target: targetTransforms.reduce((result, transformer) => transformer({
+      corePluginName,
       target: result
-    }); }, target),
-    value: JSON.stringify(value)}));
-  });
-  var filteredResults = results.filter(function (item) { return !item.target.includes('-array-') && (input.rating ? typeof item.rating !== 'undefined' : true); });
+    }), target),
+    value: typeof value === 'function' ? '' : String(value) // Make sure objects are flattened and viewable
+
+  }));
+  const filteredResults = results.filter(item => !item.target.includes('-array-') && (input.rating ? typeof item.rating !== 'undefined' : true));
   return filteredResults;
 };
 
-var matchConfig = function (ref) {
-  var config = ref.config;
-  var theme = ref.theme;
-  var className = ref.className;
-  var rest$1 = objectWithoutProperties( ref, ["config", "theme", "className"] );
-  var rest = rest$1;
+const matchConfig = ({
+  config,
+  theme,
+  className,
+  corePluginName,
+  hasNegative
+}) => [...config].reduce((results, item) => // eslint-disable-next-line unicorn/prefer-spread
+results.concat(normalizeCoreConfig({
+  config: theme(item),
+  input: className,
+  corePluginName,
+  hasNegative
+})), []).sort((a, b) => b.rating - a.rating);
 
-  return [].concat( config ).reduce(function (results, item) { return results.concat(normalizeDynamicConfig(Object.assign({}, {config: theme(item),
-  input: className},
-  rest))); }, []).sort(function (a, b) { return b.rating - a.rating; });
-};
+const getConfig = properties => matchConfig(_extends({}, properties, {
+  className: null
+})).slice(0, 20);
 
-var getConfig = function (properties) { return matchConfig(Object.assign({}, properties,
-  {className: null})).slice(0, 20); };
+const sortRatingHighestFirst$1 = (a, b) => b.rating - a.rating;
 
-var getSuggestions = function (ref) {
-  var ref_pieces = ref.pieces;
-  var className = ref_pieces.className;
-  var hasNegative = ref_pieces.hasNegative;
-  var state = ref.state;
-  var config = ref.config;
-  var dynamicKey = ref.dynamicKey;
+const getSuggestions$1 = args => {
+  const {
+    pieces: {
+      className,
+      hasNegative
+    },
+    state,
+    config,
+    corePluginName
+  } = args;
+  const customSuggestions = getCustomSuggestions(className);
+  if (customSuggestions) return customSuggestions;
 
-  var customSuggestions = getCustomSuggestions(className);
-  if (customSuggestions) { return customSuggestions; }
-
-  if (config) {
-    var theme = getTheme(state.config.theme);
-    var properties = {
-      config: config,
-      theme: theme,
-      dynamicKey: dynamicKey,
-      className: className,
-      hasNegative: hasNegative
+  if (!isEmpty$1(config)) {
+    const theme = getTheme(state.config.theme);
+    const properties = {
+      config,
+      theme,
+      corePluginName,
+      className,
+      hasNegative
     };
-    var dynamicMatches = matchConfig(properties);
-    if (dynamicMatches.length === 0) { return getConfig(properties); } // Check if the user means to select a default class
+    const matches = matchConfig(properties);
+    if (matches.length === 0) return getConfig(properties); // Check if the user means to select a default class
 
-    var defaultFound = dynamicMatches.find(function (match) { return match.target.endsWith('-default') && match.target.replace('-default', '') === className; });
-    if (defaultFound) { return defaultFound.target; } // If there's a high rated suggestion then return it
+    const defaultFound = matches.find(match => match.target.endsWith('-default') && match.target.replace('-default', '') === className);
+    if (defaultFound) return [defaultFound]; // If there's high rated suggestions then return them
 
-    var trumpMatches = dynamicMatches.filter(function (match) { return match.rating >= 0.5; });
-    if (!isEmpty(trumpMatches)) { return trumpMatches; }
-    return dynamicMatches;
-  } // Static or unmatched className
-
-
-  var staticClassNames = Object.keys(staticStyles);
-  var dynamicClassMatches = Object.entries(dynamicStyles).map(function (ref) {
-    var k = ref[0];
-    var v = ref[1];
-
-    return typeof v === 'object' ? v.default ? [k, v].join('-') : (k + "-...") : null;
-  }).filter(Boolean);
-  var matches = stringSimilarity.findBestMatch(className, staticClassNames.concat( dynamicClassMatches)).ratings.filter(function (item) { return item.rating > 0.25; });
-  var hasNoMatches = matches.every(function (match) { return match.rating === 0; });
-  if (hasNoMatches) { return []; }
-  var sortedMatches = matches.sort(function (a, b) { return b.rating - a.rating; });
-  var trumpMatch = sortedMatches.find(function (match) { return match.rating >= 0.6; });
-  if (trumpMatch) { return trumpMatch.target; }
-  return sortedMatches.slice(0, 6);
-};
-
-var addDataTwPropToPath = function (ref) {
-  var t = ref.t;
-  var attributes = ref.attributes;
-  var rawClasses = ref.rawClasses;
-  var path$$1 = ref.path;
-  var state = ref.state;
-  var propName = ref.propName; if ( propName === void 0 ) propName = 'data-tw';
-
-  var dataTwPropAllEnvironments = propName === 'data-tw' && state.configTwin.dataTwProp === 'all';
-  var dataCsPropAllEnvironments = propName === 'data-cs' && state.configTwin.dataCsProp === 'all';
-  if (state.isProd && !dataTwPropAllEnvironments && !dataCsPropAllEnvironments) { return; }
-  if (propName === 'data-tw' && !state.configTwin.dataTwProp) { return; }
-  if (propName === 'data-cs' && !state.configTwin.dataCsProp) { return; } // Remove the existing debug attribute if you happen to have it
-
-  var dataProperty = attributes.filter( // TODO: Use @babel/plugin-proposal-optional-chaining
-  function (p) { return p.node && p.node.name && p.node.name.name === propName; });
-  dataProperty.forEach(function (path$$1) { return path$$1.remove(); });
-  var classes = formatProp(rawClasses); // Add the attribute
-
-  path$$1.insertAfter(t.jsxAttribute(t.jsxIdentifier(propName), t.stringLiteral(classes)));
-};
-
-var addDataPropToExistingPath = function (ref) {
-  var t = ref.t;
-  var attributes = ref.attributes;
-  var rawClasses = ref.rawClasses;
-  var path$$1 = ref.path;
-  var state = ref.state;
-  var propName = ref.propName; if ( propName === void 0 ) propName = 'data-tw';
-
-  var dataTwPropAllEnvironments = propName === 'data-tw' && state.configTwin.dataTwProp === 'all';
-  var dataCsPropAllEnvironments = propName === 'data-cs' && state.configTwin.dataCsProp === 'all';
-  if (state.isProd && !dataTwPropAllEnvironments && !dataCsPropAllEnvironments) { return; }
-  if (propName === 'data-tw' && !state.configTwin.dataTwProp) { return; }
-  if (propName === 'data-cs' && !state.configTwin.dataCsProp) { return; } // Append to the existing debug attribute
-
-  var dataProperty = attributes.find( // TODO: Use @babel/plugin-proposal-optional-chaining
-  function (p) { return p.node && p.node.name && p.node.name.name === propName; });
-
-  if (dataProperty) {
-    try {
-      // Existing data prop
-      if (dataProperty.node.value.value) {
-        dataProperty.node.value.value = "" + ([dataProperty.node.value.value, rawClasses].filter(Boolean).join(' | '));
-        return;
-      } // New data prop
-
-
-      dataProperty.node.value.expression.value = "" + ([dataProperty.node.value.expression.value, rawClasses].filter(Boolean).join(' | '));
-    } catch (_) {}
-
-    return;
+    const trumpMatches = matches.filter(match => match.rating >= 0.5);
+    if (!isEmpty$1(trumpMatches)) return trumpMatches.slice(0, 5);
+    return matches.slice(0, 5);
   }
 
-  var classes = formatProp(rawClasses); // Add a new attribute
+  const classMatches = [...new Set(Object.entries(corePlugins).map(([k, v]) => toArray(v).map(v => isObject(v.output) ? `${k}` : !isEmpty$1(v.config) ? getSuggestions$1(_extends({}, args, {
+    config: toArray(v.config)
+  })).map(s => s.target ? [k, s.target].join('-') : k) : `${k}-___`)).filter(Boolean).flat(2))];
+  let matches = stringSimilarity__default["default"].findBestMatch(className, classMatches).ratings.filter(item => item.rating > 0.2);
+  if (matches.length === 0) return []; // Bump up the rating on matches where the first few letters match
 
-  path$$1.pushContainer('attributes', t.jSXAttribute(t.jSXIdentifier(propName), t.jSXExpressionContainer(t.stringLiteral(classes))));
+  const [firstPart] = splitOnFirst(className, '-');
+  matches = matches.map(m => _extends({}, m, {
+    rating: Number(m.rating) + (stringSimilarity__default["default"].compareTwoStrings(firstPart, m.target) > 0.2 ? 0.2 : 0)
+  }));
+  matches = matches.sort(sortRatingHighestFirst$1); // Single trumping match - good chance this is the one
+
+  const trumpMatch = matches.find(match => match.rating >= 0.6);
+  if (trumpMatch) return trumpMatch.target;
+  return matches.slice(0, 5);
 };
 
-var color$1 = {
-  error: chalk.hex('#ff8383'),
-  errorLight: chalk.hex('#ffd3d3'),
-  success: chalk.greenBright,
-  highlight: chalk.yellowBright,
-  highlight2: chalk.blue,
-  subdued: chalk.hex('#999')
-};
+const getUnsupportedError = feature => logErrorFix(`A plugin is trying to use the unsupported “${feature}” function`, `Either remove the plugin or add this in your twin config: \`{ "allowUnsupportedPlugins": true }\``);
 
-var spaced = function (string) { return ("\n\n" + string + "\n"); };
+const SPREAD_ID = '__spread__';
+const COMPUTED_ID = '__computed__';
 
-var warning = function (string) { return color$1.error(("✕ " + string)); };
-
-var inOutPlugins = function (input, output) { return ((color$1.highlight2('→')) + " " + input + " " + (color$1.highlight2(JSON.stringify(output)))); };
-
-var inOut = function (input, output) { return ((color$1.success('✓')) + " " + input + " " + (color$1.success(JSON.stringify(output)))); };
-
-var logNoVariant = function (variant, validVariants) { return spaced(((warning(("The variant “" + variant + ":” was not found"))) + "\n\n" + (Object.entries(validVariants).map(function (ref) {
-  var k = ref[0];
-  var v = ref[1];
-
-  return (k + "\n" + (v.map(function (item, index) { return ("" + (v.length > 6 && index % 6 === 0 && index > 0 ? '\n' : '') + (color$1.highlight(item)) + ":"); }).join(color$1.subdued(' / '))));
-  }).join('\n\n')) + "\n\nRead more at https://twinredirect.page.link/variantList")); };
-
-var logNotAllowed = function (ref) {
-  var className = ref.className;
-  var error = ref.error;
-
-  return spaced(warning(((color$1.errorLight(("" + className))) + " " + error)));
-};
-
-var logBadGood = function (bad, good) { return good ? spaced(((color$1.error('✕ Bad:')) + " " + bad + "\n" + (color$1.success('✓ Good:')) + " " + good)) : logGeneralError(bad); };
-
-var logErrorFix = function (error, good) { return ((color$1.error(error)) + "\n" + (color$1.success('Fix:')) + " " + good); };
-
-var logGeneralError = function (error) { return spaced(warning(error)); };
-
-var debugSuccess = function (className, log) { return inOut(formatProp(className), log); };
-
-var formatPluginKey = function (key) { return key.replace(/(\\|(}}))/g, '').replace(/{{/g, '.'); };
-
-var debugPlugins = function (processedPlugins) {
-  console.log(Object.entries(processedPlugins).map(function (ref) {
-    var group = ref[1];
-
-    return Object.entries(group).map(function (ref) {
-    var className = ref[0];
-    var styles = ref[1];
-
-    return inOutPlugins(formatPluginKey(className), styles);
-    }).join('\n');
-  }).join("\n"));
-};
-
-var formatSuggestions = function (suggestions, lineLength, maxLineLength) {
-  if ( lineLength === void 0 ) lineLength = 0;
-  if ( maxLineLength === void 0 ) maxLineLength = 60;
-
-  return suggestions.map(function (s, index) {
-  lineLength = lineLength + ("" + (s.target) + (s.value)).length;
-  var divider = lineLength > maxLineLength ? '\n' : index !== suggestions.length - 1 ? color$1.subdued(' / ') : '';
-  if (lineLength > maxLineLength) { lineLength = 0; }
-  return ("" + (color$1.highlight(s.target)) + (s.value ? color$1.subdued((" [" + (s.value) + "]")) : '') + divider);
-}).join('');
-};
-
-var logNoClass = function (properties) {
-  var classNameRawNoVariants = properties.pieces.classNameRawNoVariants;
-  var text = warning(((classNameRawNoVariants ? color$1.errorLight(classNameRawNoVariants.replace(new RegExp(SPACE_ID, 'g'), ' ')) : 'Class') + " was not found"));
-  return text;
-};
-
-var logDeeplyNestedClass = function (properties) {
-  var classNameRawNoVariants = properties.pieces.classNameRawNoVariants;
-  var text = warning(((classNameRawNoVariants ? color$1.errorLight(classNameRawNoVariants) : 'Class') + " is too deeply nested in your tailwind.config.js"));
-  return text;
-};
-
-var checkDarkLightClasses = function (className) { return throwIf(['dark', 'light'].includes(className), function () { return ("\n\n\"" + className + "\" must be added as className:" + (logBadGood(("tw`" + className + "`"), ("<div className=\"" + className + "\">"))) + "\nRead more at https://twinredirect.page.link/darkLightMode\n"); }); };
-
-var errorSuggestions = function (properties) {
-  var properties_state = properties.state;
-  var hasSuggestions = properties_state.configTwin.hasSuggestions;
-  var prefix = properties_state.config.prefix;
-  var className = properties.pieces.className;
-  var isCsOnly = properties.isCsOnly;
-  if (isCsOnly) { return spaced(((color$1.highlight(className)) + " isn’t valid “short css”.\n\nThe syntax is like this: max-width[100vw]\nRead more at https://twinredirect.page.link/cs-classes")); }
-  checkDarkLightClasses(className);
-  var textNotFound = logNoClass(properties);
-  if (!hasSuggestions) { return spaced(textNotFound); }
-  var suggestions = getSuggestions(properties);
-  if (suggestions.length === 0) { return spaced(textNotFound); }
-
-  if (typeof suggestions === 'string') {
-    if (suggestions === className) {
-      return spaced(logDeeplyNestedClass(properties));
-    } // Provide a suggestion for the default key update
-
-
-    if (suggestions.endsWith('-default')) {
-      return spaced((textNotFound + "\n\n" + (color$1.highlight(("To fix this, rename the 'default' key to 'DEFAULT' in your tailwind config or use the class '" + className + "-default'"))) + "\nRead more at https://twinredirect.page.link/default-to-DEFAULT"));
-    }
-
-    return spaced((textNotFound + "\n\nDid you mean " + (color$1.highlight([prefix, suggestions].filter(Boolean).join(''))) + "?"));
-  }
-
-  var suggestionText = suggestions.length === 1 ? ("Did you mean " + (color$1.highlight([prefix, suggestions.shift().target].filter(Boolean).join(''))) + "?") : ("Try one of these classes:\n" + (formatSuggestions(suggestions)));
-  return spaced((textNotFound + "\n\n" + suggestionText));
-};
-
-var themeErrorNotFound = function (ref) {
-  var theme = ref.theme;
-  var input = ref.input;
-  var trimInput = ref.trimInput;
-
-  if (typeof theme === 'string') {
-    return logBadGood(input, trimInput);
-  }
-
-  var textNotFound = warning(((color$1.errorLight(input)) + " was not found in your theme"));
-
-  if (!theme) {
-    return spaced(textNotFound);
-  }
-
-  var suggestionText = "Try one of these values:\n" + (formatSuggestions(Object.entries(theme).map(function (ref) {
-    var k = ref[0];
-    var v = ref[1];
-
-    return ({
-    target: k.includes && k.includes('.') ? ("[" + k + "]") : k,
-    value: typeof v === 'string' ? v : '...'
-  });
-  })));
-  return spaced((textNotFound + "\n\n" + suggestionText));
-};
-
-var opacityErrorNotFound = function (ref) {
-  var className = ref.className;
-
-  var textNotFound = warning(("The class " + (color$1.errorLight(className)) + " doesn’t support an opacity"));
-  return spaced(textNotFound);
-};
-
-var logNotFoundVariant = function (ref) {
-  var classNameRaw = ref.classNameRaw;
-
-  return logBadGood(("" + classNameRaw), [(classNameRaw + "flex"), (classNameRaw + "(flex bg-black)")].join(color$1.subdued(' / ')));
-};
-
-var logNotFoundClass = logGeneralError('That class was not found');
-var logStylePropertyError = spaced(logErrorFix('Styles shouldn’t be added within a `style={...}` prop', 'Use the tw or css prop instead: <div tw="" /> or <div css={tw``} />\n\nDisable this error by adding this in your twin config: `{ "allowStyleProp": true }`\nRead more at https://twinredirect.page.link/style-prop'));
-
-var debug = function (state) { return function (message) {
-  if (state.isDev !== true) { return; }
-  if (state.configTwin.debug !== true) { return; }
-  return console.log(message);
-}; };
-
-var SPREAD_ID = '__spread__';
-var COMPUTED_ID = '__computed__';
-
-function addImport(ref) {
-  var t = ref.types;
-  var program = ref.program;
-  var mod = ref.mod;
-  var name = ref.name;
-  var identifier = ref.identifier;
-
-  var importName = name === 'default' ? [t.importDefaultSpecifier(identifier)] : name ? [t.importSpecifier(identifier, t.identifier(name))] : [];
+function addImport({
+  types: t,
+  program,
+  mod,
+  name,
+  identifier
+}) {
+  const importName = name === 'default' ? [t.importDefaultSpecifier(identifier)] : name ? [t.importSpecifier(identifier, t.identifier(name))] : [];
   program.unshiftContainer('body', t.importDeclaration(importName, t.stringLiteral(mod)));
 }
 
 function objectExpressionElements(literal, t, spreadType) {
-  return Object.keys(literal).filter(function (k) {
-    return typeof literal[k] !== 'undefined';
-  }).map(function (k) {
+  return Object.keys(literal).filter(k => typeof literal[k] !== 'undefined').map(k => {
     if (k.startsWith(SPREAD_ID)) {
-      return t[spreadType](babylon.parseExpression(literal[k]));
+      return t[spreadType](babylon__default["default"].parseExpression(literal[k]));
     }
 
-    var computed = k.startsWith(COMPUTED_ID);
-    var key = computed ? babylon.parseExpression(k.slice(12)) : t.stringLiteral(k);
+    const computed = k.startsWith(COMPUTED_ID);
+    const key = computed ? babylon__default["default"].parseExpression(k.slice(12)) : t.stringLiteral(k);
     return t.objectProperty(key, astify(literal[k], t), computed);
   });
 }
@@ -3994,7 +4077,7 @@ function astify(literal, t) {
 
     case 'string':
       if (literal.startsWith(COMPUTED_ID)) {
-        return babylon.parseExpression(literal.slice(COMPUTED_ID.length));
+        return babylon__default["default"].parseExpression(literal.slice(COMPUTED_ID.length));
       }
 
       return t.stringLiteral(literal);
@@ -4002,7 +4085,7 @@ function astify(literal, t) {
     default:
       // Assuming literal is an object
       if (Array.isArray(literal)) {
-        return t.arrayExpression(literal.map(function (x) { return astify(x, t); }));
+        return t.arrayExpression(literal.map(x => astify(x, t)));
       }
 
       try {
@@ -4014,17 +4097,17 @@ function astify(literal, t) {
   }
 }
 
-var setStyledIdentifier = function (ref) {
-  var state = ref.state;
-  var path$$1 = ref.path;
-  var styledImport = ref.styledImport;
-
-  var importFromStitches = state.isStitches && styledImport.from.includes(path$$1.node.source.value);
-  var importFromLibrary = path$$1.node.source.value === styledImport.from;
-  if (!importFromLibrary && !importFromStitches) { return; } // Look for an existing import that matches the config,
+const setStyledIdentifier = ({
+  state,
+  path,
+  styledImport
+}) => {
+  const importFromStitches = state.isStitches && styledImport.from.includes(path.node.source.value);
+  const importFromLibrary = path.node.source.value === styledImport.from;
+  if (!importFromLibrary && !importFromStitches) return; // Look for an existing import that matches the config,
   // if found then reuse it for the rest of the function calls
 
-  path$$1.node.specifiers.some(function (specifier) {
+  path.node.specifiers.some(specifier => {
     if (specifier.type === 'ImportDefaultSpecifier' && styledImport.import === 'default' && // fixes an issue in gatsby where the styled-components plugin has run
     // before twin. fix is to ignore import aliases which babel creates
     // https://github.com/ben-rogerson/twin.macro/issues/192
@@ -4045,17 +4128,17 @@ var setStyledIdentifier = function (ref) {
   });
 };
 
-var setCssIdentifier = function (ref) {
-  var state = ref.state;
-  var path$$1 = ref.path;
-  var cssImport = ref.cssImport;
-
-  var importFromStitches = state.isStitches && cssImport.from.includes(path$$1.node.source.value);
-  var isLibraryImport = path$$1.node.source.value === cssImport.from;
-  if (!isLibraryImport && !importFromStitches) { return; } // Look for an existing import that matches the config,
+const setCssIdentifier = ({
+  state,
+  path,
+  cssImport
+}) => {
+  const importFromStitches = state.isStitches && cssImport.from.includes(path.node.source.value);
+  const isLibraryImport = path.node.source.value === cssImport.from;
+  if (!isLibraryImport && !importFromStitches) return; // Look for an existing import that matches the config,
   // if found then reuse it for the rest of the function calls
 
-  path$$1.node.specifiers.some(function (specifier) {
+  path.node.specifiers.some(specifier => {
     if (specifier.type === 'ImportDefaultSpecifier' && cssImport.import === 'default') {
       state.cssIdentifier = specifier.local;
       state.existingCssIdentifier = true;
@@ -4077,48 +4160,51 @@ var setCssIdentifier = function (ref) {
  */
 
 
-function parseTte(ref) {
-  var path$$1 = ref.path;
-  var t = ref.types;
-  var styledIdentifier = ref.styledIdentifier;
-  var state = ref.state;
+function parseTte({
+  path,
+  types: t,
+  styledIdentifier,
+  state
+}) {
+  const cloneNode = t.cloneNode || t.cloneDeep;
+  const tagType = path.node.tag.type;
+  if (tagType !== 'Identifier' && tagType !== 'MemberExpression' && tagType !== 'CallExpression') return null; // Convert *very* basic interpolated variables
 
-  var cloneNode = t.cloneNode || t.cloneDeep;
-  var tagType = path$$1.node.tag.type;
-  if (tagType !== 'Identifier' && tagType !== 'MemberExpression' && tagType !== 'CallExpression') { return null; } // Convert *very* basic interpolated variables
+  const string = path.get('quasi').evaluate().value; // Grab the path location before changing it
 
-  var string = path$$1.get('quasi').evaluate().value; // Grab the path location before changing it
-
-  var stringLoc = path$$1.get('quasi').node.loc;
+  const stringLoc = path.get('quasi').node.loc;
 
   if (tagType === 'CallExpression') {
-    replaceWithLocation(path$$1.get('tag').get('callee'), cloneNode(styledIdentifier));
+    replaceWithLocation(path.get('tag').get('callee'), cloneNode(styledIdentifier));
     state.isImportingStyled = true;
   } else if (tagType === 'MemberExpression') {
-    replaceWithLocation(path$$1.get('tag').get('object'), cloneNode(styledIdentifier));
+    replaceWithLocation(path.get('tag').get('object'), cloneNode(styledIdentifier));
     state.isImportingStyled = true;
   }
 
   if (tagType === 'CallExpression' || tagType === 'MemberExpression') {
-    replaceWithLocation(path$$1, t.callExpression(cloneNode(path$$1.node.tag), [t.identifier('__twPlaceholder')]));
-    path$$1 = path$$1.get('arguments')[0];
+    replaceWithLocation(path, t.callExpression(cloneNode(path.node.tag), [t.identifier('__twPlaceholder')]));
+    path = path.get('arguments')[0];
   } // Restore the original path location
 
 
-  path$$1.node.loc = stringLoc;
+  path.node.loc = stringLoc;
   return {
-    string: string,
-    path: path$$1
+    string,
+    path
   };
 }
 
-function replaceWithLocation(path$$1, replacement) {
-  var ref = path$$1.node;
-  var loc = ref.loc;
-  var newPaths = replacement ? path$$1.replaceWith(replacement) : [];
+function replaceWithLocation(path, replacement) {
+  const {
+    loc
+  } = path.node;
+  const newPaths = replacement ? path.replaceWith(replacement) : [];
 
   if (Array.isArray(newPaths) && newPaths.length > 0) {
-    newPaths.forEach(function (p) {
+    // FIXME: Remove comment and fix next line
+    // eslint-disable-next-line unicorn/no-array-for-each
+    newPaths.forEach(p => {
       p.node.loc = loc;
     });
   }
@@ -4126,159 +4212,163 @@ function replaceWithLocation(path$$1, replacement) {
   return newPaths;
 }
 
-var validImports = new Set(['default', 'styled', 'css', 'theme', 'screen', 'TwStyle', 'ThemeStyle', 'GlobalStyles', 'globalStyles']);
+const validImports = new Set(['default', 'styled', 'css', 'theme', 'screen', 'TwStyle', 'TwComponent', 'ThemeStyle', 'GlobalStyles', 'globalStyles']);
 
-var validateImports = function (imports) {
-  var unsupportedImport = Object.keys(imports).find(function (reference) { return !validImports.has(reference); });
-  var importTwAsNamedNotDefault = Object.keys(imports).find(function (reference) { return reference === 'tw'; });
-  throwIf(importTwAsNamedNotDefault, function () {
-    logGeneralError("Please use the default export for twin.macro, i.e:\nimport tw from 'twin.macro'\nNOT import { tw } from 'twin.macro'");
+const validateImports = imports => {
+  const unsupportedImport = Object.keys(imports).find(reference => !validImports.has(reference));
+  const importTwAsNamedNotDefault = Object.keys(imports).find(reference => reference === 'tw');
+  throwIf(importTwAsNamedNotDefault, () => {
+    logGeneralError(`Please use the default export for twin.macro, i.e:\nimport tw from 'twin.macro'\nNOT import { tw } from 'twin.macro'`);
   });
-  throwIf(unsupportedImport, function () { return logGeneralError(("Twin doesn't recognize { " + unsupportedImport + " }\n\nTry one of these imports:\nimport tw, { styled, css, theme, screen, GlobalStyles, globalStyles } from 'twin.macro'")); });
+  throwIf(unsupportedImport, () => logGeneralError(`Twin doesn't recognize { ${unsupportedImport} }\n\nTry one of these imports:\nimport tw, { styled, css, theme, screen, GlobalStyles, globalStyles } from 'twin.macro'`));
 };
 
-var generateUid = function (name, program) { return program.scope.generateUidIdentifier(name); };
+const generateUid = (name, program) => program.scope.generateUidIdentifier(name);
 
-var getParentJSX = function (path$$1) { return path$$1.findParent(function (p) { return p.isJSXOpeningElement(); }); };
+const getParentJSX = path => path.findParent(p => p.isJSXOpeningElement());
 
-var getAttributeNames = function (jsxPath) {
-  var attributes = jsxPath.get('attributes');
-  var attributeNames = attributes.map(function (p) { return p.node.name && p.node.name.name; });
+const getAttributeNames = jsxPath => {
+  const attributes = jsxPath.get('attributes');
+  const attributeNames = attributes.map(p => p.node.name && p.node.name.name);
   return attributeNames;
 };
 
-var getCssAttributeData = function (attributes) {
-  if (!String(attributes)) { return {}; }
-  var index = attributes.findIndex(function (attribute) { return attribute.isJSXAttribute() && attribute.get('name.name').node === 'css'; });
+const getCssAttributeData = attributes => {
+  if (!String(attributes)) return {};
+  const index = attributes.findIndex(attribute => attribute.isJSXAttribute() && attribute.get('name.name').node === 'css');
   return {
-    index: index,
+    index,
     hasCssAttribute: index >= 0,
     attribute: attributes[index]
   };
 };
 
-var getFunctionValue = function (path$$1) {
-  if (path$$1.parent.type !== 'CallExpression') { return; }
-  var parent = path$$1.findParent(function (x) { return x.isCallExpression(); });
-  if (!parent) { return; }
-  var argument = parent.get('arguments')[0] || '';
+const getFunctionValue = path => {
+  if (path.parent.type !== 'CallExpression') return;
+  const parent = path.findParent(x => x.isCallExpression());
+  if (!parent) return;
+  const argument = parent.get('arguments')[0] || '';
   return {
-    parent: parent,
+    parent,
     input: argument.evaluate && argument.evaluate().value
   };
 };
 
-var getTaggedTemplateValue = function (path$$1) {
-  if (path$$1.parent.type !== 'TaggedTemplateExpression') { return; }
-  var parent = path$$1.findParent(function (x) { return x.isTaggedTemplateExpression(); });
-  if (!parent) { return; }
-  if (parent.node.tag.type !== 'Identifier') { return; }
+const getTaggedTemplateValue = path => {
+  if (path.parent.type !== 'TaggedTemplateExpression') return;
+  const parent = path.findParent(x => x.isTaggedTemplateExpression());
+  if (!parent) return;
+  if (parent.node.tag.type !== 'Identifier') return;
   return {
-    parent: parent,
+    parent,
     input: parent.get('quasi').evaluate().value
   };
 };
 
-var getMemberExpression = function (path$$1) {
-  if (path$$1.parent.type !== 'MemberExpression') { return; }
-  var parent = path$$1.findParent(function (x) { return x.isMemberExpression(); });
-  if (!parent) { return; }
+const getMemberExpression = path => {
+  if (path.parent.type !== 'MemberExpression') return;
+  const parent = path.findParent(x => x.isMemberExpression());
+  if (!parent) return;
   return {
-    parent: parent,
+    parent,
     input: parent.get('property').node.name
   };
 };
 
-var generateTaggedTemplateExpression = function (ref) {
-  var identifier = ref.identifier;
-  var t = ref.t;
-  var styles = ref.styles;
-
-  var backtickStyles = t.templateElement({
-    raw: ("" + styles),
-    cooked: ("" + styles)
+const generateTaggedTemplateExpression = ({
+  identifier,
+  t,
+  styles
+}) => {
+  const backtickStyles = t.templateElement({
+    raw: `${styles}`,
+    cooked: `${styles}`
   });
-  var ttExpression = t.taggedTemplateExpression(identifier, t.templateLiteral([backtickStyles], []));
+  const ttExpression = t.taggedTemplateExpression(identifier, t.templateLiteral([backtickStyles], []));
   return ttExpression;
 };
 
-var isComponent = function (name) { return name.slice(0, 1).toUpperCase() === name.slice(0, 1); };
+const isComponent = name => name.slice(0, 1).toUpperCase() === name.slice(0, 1);
 
-var jsxElementNameError = function () { return logGeneralError("The css prop + tw props can only be added to jsx elements with a single dot in their name (or no dot at all)."); };
+const jsxElementNameError = () => logGeneralError(`The css prop + tw props can only be added to jsx elements with a single dot in their name (or no dot at all).`);
 
-var getFirstStyledArgument = function (jsxPath, t) {
-  var path$$1 = get(jsxPath, 'node.name.name');
-  if (path$$1) { return isComponent(path$$1) ? t.identifier(path$$1) : t.stringLiteral(path$$1); }
-  var dotComponent = get(jsxPath, 'node.name');
+const getFirstStyledArgument = (jsxPath, t) => {
+  const path = get__default["default"](jsxPath, 'node.name.name');
+  if (path) return isComponent(path) ? t.identifier(path) : t.stringLiteral(path);
+  const dotComponent = get__default["default"](jsxPath, 'node.name');
   throwIf(!dotComponent, jsxElementNameError); // Element name has dots in it
 
-  var objectName = get(dotComponent, 'object.name');
+  const objectName = get__default["default"](dotComponent, 'object.name');
   throwIf(!objectName, jsxElementNameError);
-  var propertyName = get(dotComponent, 'property.name');
+  const propertyName = get__default["default"](dotComponent, 'property.name');
   throwIf(!propertyName, jsxElementNameError);
   return t.memberExpression(t.identifier(objectName), t.identifier(propertyName));
 };
 
-var makeStyledComponent = function (ref) {
-  var secondArg = ref.secondArg;
-  var jsxPath = ref.jsxPath;
-  var t = ref.t;
-  var program = ref.program;
-  var state = ref.state;
-
-  var constName = program.scope.generateUidIdentifier('TwComponent');
+const makeStyledComponent = ({
+  secondArg,
+  jsxPath,
+  t,
+  program,
+  state
+}) => {
+  const constName = program.scope.generateUidIdentifier('TwComponent');
 
   if (!state.styledIdentifier) {
     state.styledIdentifier = generateUid('styled', program);
     state.isImportingStyled = true;
   }
 
-  var firstArg = getFirstStyledArgument(jsxPath, t);
-  var args = [firstArg, secondArg].filter(Boolean);
-  var identifier = t.callExpression(state.styledIdentifier, args);
-  var styledProps = [t.variableDeclarator(constName, identifier)];
-  var styledDefinition = t.variableDeclaration('const', styledProps);
-  var rootParentPath = jsxPath.findParent(function (p) { return p.parentPath.isProgram(); });
+  const firstArg = getFirstStyledArgument(jsxPath, t);
+  const args = [firstArg, secondArg].filter(Boolean);
+  const identifier = t.callExpression(state.styledIdentifier, args);
+  const styledProps = [t.variableDeclarator(constName, identifier)];
+  const styledDefinition = t.variableDeclaration('const', styledProps);
+  const rootParentPath = jsxPath.findParent(p => p.parentPath.isProgram());
   rootParentPath.insertBefore(styledDefinition);
 
   if (t.isMemberExpression(firstArg)) {
     // Replace components with a dot, eg: Dialog.blah
-    var id = t.jsxIdentifier(constName.name);
+    const id = t.jsxIdentifier(constName.name);
     jsxPath.get('name').replaceWith(id);
-    if (jsxPath.node.selfClosing) { return; }
+    if (jsxPath.node.selfClosing) return;
     jsxPath.parentPath.get('closingElement.name').replaceWith(id);
   } else {
     jsxPath.node.name.name = constName.name;
-    if (jsxPath.node.selfClosing) { return; }
+    if (jsxPath.node.selfClosing) return;
     jsxPath.parentPath.node.closingElement.name.name = constName.name;
   }
 };
 
 // Defaults for different css-in-js libraries
-var configDefaultsGoober = {
+const configDefaultsGoober = {
   sassyPseudo: true
 }; // Sets selectors like hover to &:hover
 
-var configDefaultsStitches = {
+const configDefaultsStitches = {
   sassyPseudo: true,
   // Sets selectors like hover to &:hover
   convertStyledDot: true,
   // Convert styled.[element] to a default syntax
   moveTwPropToStyled: true,
   // Move the tw prop to a styled definition
-  convertHtmlElementToStyled: true // For packages like stitches, add a styled definition on css prop elements
+  convertHtmlElementToStyled: true,
+  // For packages like stitches, add a styled definition on css prop elements
+  stitchesConfig: undefined // Set the path to the stitches config
 
 };
 
-var configDefaultsTwin = function (ref) {
-  var isGoober = ref.isGoober;
-  var isStitches = ref.isStitches;
-  var isDev = ref.isDev;
-
-  return (Object.assign({}, {allowStyleProp: false,
+const configDefaultsTwin = ({
+  isGoober,
+  isStitches,
+  isDev
+}) => _extends({
+  allowUnsupportedPlugins: false,
+  // Allow plugins to use an unsupported API function, eg: addVariant()
+  allowStyleProp: false,
   // Allows styles within style="blah" without throwing an error
   autoCssProp: false,
-  // Automates the import of styled-components when you use their css prop
+  // Deprecated since v2.8.2
   dataTwProp: isDev,
   // During development, add a data-tw="" prop containing your tailwind classes for backtracing
   hasSuggestions: true,
@@ -4287,6 +4377,8 @@ var configDefaultsTwin = function (ref) {
   // Sets selectors like hover to &:hover
   debug: false,
   // Show the output of the classes twin converts
+  debugPlugins: false,
+  // Display generated class information from your plugins
   includeClassNames: false,
   // Look in the className props for tailwind classes to convert
   dataCsProp: isDev,
@@ -4295,33 +4387,22 @@ var configDefaultsTwin = function (ref) {
   // Disable converting css styles in the cs prop
   disableShortCss: false,
   // Disable converting css written using short css
-  stitchesConfig: undefined,
-  // Set the path to the stitches config (stitches only)
-  config: undefined,
-  // Set the path to the tailwind config
-  convertStyledDot: false,
-  // Convert styled.[element] to a default syntax (only used for stitches so far)
-  moveTwPropToStyled: false,
-  // Move the tw prop to a styled definition (only used for stitches so far)
-  convertHtmlElementToStyled: false},
-  // For packages like stitches, add a styled definition on css prop elements
-  (isGoober && configDefaultsGoober),
-  (isStitches && configDefaultsStitches)));
-};
+  config: undefined
+}, isGoober && configDefaultsGoober, isStitches && configDefaultsStitches);
 
-var isBoolean = function (value) { return typeof value === 'boolean'; };
+const isBoolean = value => typeof value === 'boolean';
 
-var allowedPresets = ['styled-components', 'emotion', 'goober', 'stitches'];
-var configTwinValidators = {
-  preset: [function (value) { return value === undefined || allowedPresets.includes(value); }, ("The config “preset” can only be:\n" + (allowedPresets.map(function (p) { return ("'" + p + "'"); }).join(', ')))],
+const allowedPresets = ['styled-components', 'emotion', 'goober', 'stitches'];
+const configTwinValidators = {
+  preset: [value => value === undefined || allowedPresets.includes(value), `The config “preset” can only be:\n${allowedPresets.map(p => `'${p}'`).join(', ')}`],
   allowStyleProp: [isBoolean, 'The config “allowStyleProp” can only be true or false'],
-  autoCssProp: [function (value) { return value !== true; }, 'The “autoCssProp” feature has been removed from twin.macro@2.8.2+\nThis means the css prop must be added by styled-components instead.\nSetup info at https://twinredirect.page.link/auto-css-prop\n\nRemove the “autoCssProp” item from your config to avoid this message.'],
-  disableColorVariables: [function (value) { return value !== true; }, 'The disableColorVariables feature has been removed from twin.macro@3+\n\nRemove the disableColorVariables item from your config to avoid this message.'],
+  autoCssProp: [value => value !== true, 'The “autoCssProp” feature has been removed from twin.macro@2.8.2+\nThis means the css prop must be added by styled-components instead.\nSetup info at https://twinredirect.page.link/auto-css-prop\n\nRemove the “autoCssProp” item from your config to avoid this message.'],
+  disableColorVariables: [value => value !== true, 'The disableColorVariables feature has been removed from twin.macro@3+\n\nRemove the disableColorVariables item from your config to avoid this message.'],
   hasSuggestions: [isBoolean, 'The config “hasSuggestions” can only be true or false'],
   sassyPseudo: [isBoolean, 'The config “sassyPseudo” can only be true or false'],
-  dataTwProp: [function (value) { return isBoolean(value) || value === 'all'; }, 'The config “dataTwProp” can only be true, false or "all"'],
-  dataCsProp: [function (value) { return isBoolean(value) || value === 'all'; }, 'The config “dataCsProp” can only be true, false or "all"'],
-  debugProp: [function (value) { return value === undefined; }, "The “debugProp” option was renamed to “dataTwProp”, please rename it in your twin config"],
+  dataTwProp: [value => isBoolean(value) || value === 'all', 'The config “dataTwProp” can only be true, false or "all"'],
+  dataCsProp: [value => isBoolean(value) || value === 'all', 'The config “dataCsProp” can only be true, false or "all"'],
+  debugProp: [value => value === undefined, `The “debugProp” option was renamed to “dataTwProp”, please rename it in your twin config`],
   includeClassNames: [isBoolean, 'The config “includeClassNames” can only be true or false'],
   disableCsProp: [isBoolean, 'The config “disableCsProp” can only be true or false'],
   convertStyledDot: [isBoolean, 'The config “convertStyledDot” can only be true or false'],
@@ -4329,83 +4410,95 @@ var configTwinValidators = {
   convertHtmlElementToStyled: [isBoolean, 'The config “convertHtmlElementToStyled” can only be true or false']
 };
 
-var getAllConfigs = function (config) {
-  var configs = flatMap([].concat( get(config, 'presets', [defaultTailwindConfig]) ).reverse(), function (preset) {
-    var config = typeof preset === 'function' ? preset() : preset;
+const getAllConfigs = config => {
+  const configs = flatMap__default["default"]([...get__default["default"](config, 'presets', [defaultTailwindConfig__default["default"]])].reverse(), preset => {
+    const config = typeof preset === 'function' ? preset() : preset;
     return getAllConfigs(config);
   });
-  return [config ].concat( configs);
-};
+  return [config, ...configs];
+}; // Fix: Warning Tailwind throws when the content key is empty
 
-var getConfigTailwindProperties = function (state, config) {
-  var sourceRoot = state.file.opts.sourceRoot || '.';
-  var configFile = config && config.config;
-  var configPath = path.resolve(sourceRoot, configFile || "./tailwind.config.js");
-  var configExists = fs.existsSync(configPath);
-  var path$$1 = configExists ? require(configPath) : defaultTailwindConfig;
-  var configTailwind = resolveTailwindConfig([].concat( getAllConfigs(path$$1) ));
-  throwIf(!configTailwind, function () { return logGeneralError(("Couldn’t find the Tailwind config.\nLooked in " + config)); });
+
+const silenceContentWarning = config => _extends({}, !config.content && {
+  content: ['']
+}, config);
+
+const getConfigTailwindProperties = (state, config) => {
+  const sourceRoot = state.file.opts.sourceRoot || '.';
+  const configFile = config && config.config;
+  const configPath = path.resolve(sourceRoot, configFile || './tailwind.config.js');
+  const configExists = fs.existsSync(configPath); // Look for a commonjs file as a fallback
+
+  if (!configExists && !configFile) return getConfigTailwindProperties(state, _extends({}, config, {
+    config: './tailwind.config.cjs'
+  }));
+  const configSelected = configExists ? require(configPath) : defaultTailwindConfig__default["default"];
+  const configUser = silenceContentWarning(configSelected);
+  const configTailwind = resolveTailwindConfig__default["default"]([...getAllConfigs(configUser)]);
+  throwIf(!configTailwind, () => logGeneralError(`Couldn’t find the Tailwind config.\nLooked in ${config}`));
   return {
-    configExists: configExists,
-    configTailwind: configTailwind,
-    configPath: configPath
+    configExists,
+    configTailwind,
+    configPath
   };
 };
 
-var checkExists = function (fileName, sourceRoot) {
-  var fileNames = Array.isArray(fileName) ? fileName : [fileName];
-  var configPath;
-  fileNames.find(function (fileName) {
-    var resolved = path.resolve(sourceRoot, ("./" + fileName));
-    var exists = fs.existsSync(resolved);
-    if (exists) { configPath = resolved; }
-    return exists;
-  });
-  return configPath;
+const checkExists = (fileName, sourceRoot) => {
+  const [, value] = getFirstValue(toArray(fileName), fileName => fs.existsSync(path.resolve(sourceRoot, `./${fileName}`)));
+  return value;
 };
 
-var getRelativePath = function (ref) {
-  var comparePath = ref.comparePath;
-  var state = ref.state;
-
-  var ref$1 = state.file.opts;
-  var filename = ref$1.filename;
-  var pathName = path.parse(filename).dir;
+const getRelativePath = ({
+  comparePath,
+  state
+}) => {
+  const {
+    filename
+  } = state.file.opts;
+  const pathName = path.parse(filename).dir;
   return path.relative(pathName, comparePath);
 };
 
-var getStitchesPath = function (state, config) {
-  var sourceRoot = state.file.opts.sourceRoot || '.';
-  var configPathCheck = config.stitchesConfig || ['stitches.config.ts', 'stitches.config.js'];
-  var configPath = checkExists(configPathCheck, sourceRoot);
-  throwIf(!configPath, function () { return logGeneralError(("Couldn’t find the Stitches config at " + (config.stitchesConfig ? ("“" + (config.stitchesConfig) + "”") : 'the project root') + ".\nUse the twin config: stitchesConfig=\"PATH_FROM_PROJECT_ROOT\" to set the location.")); });
+const getStitchesPath = (state, config) => {
+  const sourceRoot = state.file.opts.sourceRoot || '.';
+  const configPathCheck = config.stitchesConfig || ['stitches.config.ts', 'stitches.config.js'];
+  const configPath = checkExists(configPathCheck, sourceRoot);
+  throwIf(!configPath, () => logGeneralError(`Couldn’t find the Stitches config at ${config.stitchesConfig ? `“${config.stitchesConfig}”` : 'the project root'}.\nUse the twin config: stitchesConfig="PATH_FROM_PROJECT_ROOT" to set the location.`));
   return getRelativePath({
     comparePath: configPath,
-    state: state
+    state
   });
 };
 
-var runConfigValidator = function (ref) {
-  var item = ref[0];
-  var value = ref[1];
-
-  var validatorConfig = configTwinValidators[item];
-  if (!validatorConfig) { return true; }
-  var validator = validatorConfig[0];
-  var errorMessage = validatorConfig[1];
-  throwIf(validator(value) !== true, function () { return logGeneralError(errorMessage); });
+const runConfigValidator = ([item, value]) => {
+  const validatorConfig = configTwinValidators[item];
+  if (!validatorConfig) return true;
+  const [validator, errorMessage] = validatorConfig;
+  throwIf(validator(value) !== true, () => logGeneralError(errorMessage));
   return true;
 };
 
-var getConfigTwin = function (config, state) { return (Object.assign({}, configDefaultsTwin(state),
-  config)); };
+const getConfigTwin = (config, state) => _extends({}, configDefaultsTwin(state), config);
 
-var getConfigTwinValidated = function (config, state) { return Object.entries(getConfigTwin(config, state)).reduce(function (result, item) {
-  var obj;
+const getConfigTwinValidated = (config, state) => Object.entries(getConfigTwin(config, state)).reduce((result, item) => _extends({}, result, runConfigValidator(item) && {
+  [item[0]]: item[1]
+}), {});
 
-  return (Object.assign({}, result,
-  (runConfigValidator(item) && ( obj = {}, obj[item[0]] = item[1], obj ))));
-  }, {}); };
+const getFlatCoercedConfigByProperty = property => {
+  const coreConfig = getCorePluginsByProperty(property);
+  const config = coreConfig.map(i => i.coerced).filter(Boolean);
+  if (config.length === 0) return;
+  return Object.assign({}, ...config);
+};
+
+const getCorePluginsByProperty = propertyName => {
+  const match = Object.entries(corePlugins).find(([k]) => propertyName === k);
+  if (!match) return [];
+  const found = match[1];
+  return toArray(found);
+};
+
+const supportsArbitraryValues = coreConfigValue => toArray(coreConfigValue).some(config => config.output && typeof config.output === 'function' || !config.output && config.coerced || config.config);
 
 /**
  * Config presets
@@ -4483,11 +4576,11 @@ var userPresets = {
   }
 };
 
-var getCssConfig = function (ref) {
-  var state = ref.state;
-  var config = ref.config;
-
-  var usedConfig = config.css && config || userPresets[config.preset] || userPresets.emotion;
+const getCssConfig = ({
+  state,
+  config
+}) => {
+  const usedConfig = config.css && config || userPresets[config.preset] || userPresets.emotion;
 
   if (typeof usedConfig.css === 'string') {
     return {
@@ -4497,7 +4590,7 @@ var getCssConfig = function (ref) {
   }
 
   if (config.preset === 'stitches') {
-    var stitchesPath = getStitchesPath(state, config);
+    const stitchesPath = getStitchesPath(state, config);
 
     if (stitchesPath) {
       // Overwrite the stitches import data with the path from the current file
@@ -4508,56 +4601,61 @@ var getCssConfig = function (ref) {
   return usedConfig.css;
 };
 
-var updateCssReferences = function (ref) {
-  var references = ref.references;
-  var state = ref.state;
+const updateCssReferences = ({
+  references,
+  state
+}) => {
+  if (state.existingCssIdentifier) return;
+  const cssReferences = references.css;
+  if (isEmpty$1(cssReferences)) return; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-  if (state.existingCssIdentifier) { return; }
-  var cssReferences = references.css;
-  if (isEmpty(cssReferences)) { return; }
-  cssReferences.forEach(function (path$$1) {
-    path$$1.node.name = state.cssIdentifier.name;
+  cssReferences.forEach(path => {
+    path.node.name = state.cssIdentifier.name;
   });
 };
 
-var addCssImport = function (ref) {
-  var references = ref.references;
-  var program = ref.program;
-  var t = ref.t;
-  var cssImport = ref.cssImport;
-  var state = ref.state;
-
+const addCssImport = ({
+  references,
+  program,
+  t,
+  cssImport,
+  state
+}) => {
   if (!state.isImportingCss) {
-    var shouldImport = !isEmpty(references.css) && !state.existingCssIdentifier;
-    if (!shouldImport) { return; }
+    const shouldImport = !isEmpty$1(references.css) && !state.existingCssIdentifier;
+    if (!shouldImport) return;
   }
 
-  if (state.existingCssIdentifier) { return; }
+  if (state.existingCssIdentifier) return;
   addImport({
     types: t,
-    program: program,
+    program,
     name: cssImport.import,
     mod: cssImport.from,
     identifier: state.cssIdentifier
   });
 };
 
-var convertHtmlElementToStyled = function (props) {
-  var path$$1 = props.path;
-  var t = props.t;
-  var state = props.state;
-  if (!state.configTwin.convertHtmlElementToStyled) { return; }
-  var jsxPath = path$$1.parentPath;
-  makeStyledComponent(Object.assign({}, props,
-    {jsxPath: jsxPath,
-    secondArg: t.objectExpression([])}));
+const convertHtmlElementToStyled = props => {
+  const {
+    path,
+    t,
+    state
+  } = props;
+  if (!state.configTwin.convertHtmlElementToStyled) return;
+  const jsxPath = path.parentPath;
+  makeStyledComponent(_extends({}, props, {
+    jsxPath,
+    secondArg: t.objectExpression([])
+  }));
 };
 
-var getStyledConfig = function (ref) {
-  var state = ref.state;
-  var config = ref.config;
-
-  var usedConfig = config.styled && config || userPresets[config.preset] || userPresets.emotion;
+const getStyledConfig = ({
+  state,
+  config
+}) => {
+  const usedConfig = config.styled && config || userPresets[config.preset] || userPresets.emotion;
 
   if (typeof usedConfig.styled === 'string') {
     return {
@@ -4567,7 +4665,7 @@ var getStyledConfig = function (ref) {
   }
 
   if (config.preset === 'stitches') {
-    var stitchesPath = getStitchesPath(state, config);
+    const stitchesPath = getStitchesPath(state, config);
 
     if (stitchesPath) {
       // Overwrite the stitches import data with the path from the current file
@@ -4578,72 +4676,76 @@ var getStyledConfig = function (ref) {
   return usedConfig.styled;
 };
 
-var updateStyledReferences = function (ref) {
-  var references = ref.references;
-  var state = ref.state;
+const updateStyledReferences = ({
+  references,
+  state
+}) => {
+  if (state.existingStyledIdentifier) return;
+  const styledReferences = references.styled;
+  if (isEmpty$1(styledReferences)) return; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-  if (state.existingStyledIdentifier) { return; }
-  var styledReferences = references.styled;
-  if (isEmpty(styledReferences)) { return; }
-  styledReferences.forEach(function (path$$1) {
-    path$$1.node.name = state.styledIdentifier.name;
+  styledReferences.forEach(path => {
+    path.node.name = state.styledIdentifier.name;
   });
 };
 
-var addStyledImport = function (ref) {
-  var references = ref.references;
-  var program = ref.program;
-  var t = ref.t;
-  var styledImport = ref.styledImport;
-  var state = ref.state;
-
+const addStyledImport = ({
+  references,
+  program,
+  t,
+  styledImport,
+  state
+}) => {
   if (!state.isImportingStyled) {
-    var shouldImport = !isEmpty(references.styled) && !state.existingStyledIdentifier;
-    if (!shouldImport) { return; }
+    const shouldImport = !isEmpty$1(references.styled) && !state.existingStyledIdentifier;
+    if (!shouldImport) return;
   }
 
-  if (state.existingStyledIdentifier) { return; }
+  if (state.existingStyledIdentifier) return;
   addImport({
     types: t,
-    program: program,
+    program,
     name: styledImport.import,
     mod: styledImport.from,
     identifier: state.styledIdentifier
   });
 };
 
-var moveDotElementToParam = function (ref) {
-  var path$$1 = ref.path;
-  var t = ref.t;
-
-  if (path$$1.parent.type !== 'MemberExpression') { return; }
-  var parentCallExpression = path$$1.findParent(function (x) { return x.isCallExpression(); });
-  if (!parentCallExpression) { return; }
-  var styledName = get(path$$1, 'parentPath.node.property.name');
-  var styledArgs = get(parentCallExpression, 'node.arguments.0');
-  var args = [t.stringLiteral(styledName), styledArgs].filter(Boolean);
-  var replacement = t.callExpression(path$$1.node, args);
+const moveDotElementToParam = ({
+  path,
+  t
+}) => {
+  if (path.parent.type !== 'MemberExpression') return;
+  const parentCallExpression = path.findParent(x => x.isCallExpression());
+  if (!parentCallExpression) return;
+  const styledName = get__default["default"](path, 'parentPath.node.property.name');
+  const styledArgs = get__default["default"](parentCallExpression, 'node.arguments.0');
+  const args = [t.stringLiteral(styledName), styledArgs].filter(Boolean);
+  const replacement = t.callExpression(path.node, args);
   replaceWithLocation(parentCallExpression, replacement);
 };
 
-var handleStyledFunction = function (ref) {
-  var references = ref.references;
-  var t = ref.t;
-  var state = ref.state;
-
-  if (!state.configTwin.convertStyledDot) { return; }
-  if (isEmpty(references)) { return; }
-  (references.default || []).concat( (references.styled || [])).filter(Boolean).forEach(function (path$$1) {
+const handleStyledFunction = ({
+  references,
+  t,
+  state
+}) => {
+  if (!state.configTwin.convertStyledDot) return;
+  if (isEmpty$1(references)) return;
+  [...(references.default || []), ...(references.styled || [])].filter(Boolean) // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
+  .forEach(path => {
     // convert tw.div`` & styled.div`` to styled('div', {})
     moveDotElementToParam({
-      path: path$$1,
-      t: t
+      path,
+      t
     });
   });
 };
 
-var trimInput = function (themeValue) {
-  var arrayValues = themeValue // Split at dots outside of square brackets
+const trimInput = themeValue => {
+  const arrayValues = themeValue // Split at dots outside of square brackets
   .split(/\.(?=(((?!]).)*\[)|[^[\]]*$)/).filter(Boolean);
 
   if (arrayValues.length === 1) {
@@ -4653,209 +4755,221 @@ var trimInput = function (themeValue) {
   return arrayValues.slice(0, -1).join('.');
 };
 
-var handleThemeFunction = function (ref) {
-  var references = ref.references;
-  var t = ref.t;
-  var state = ref.state;
+const getThemeValue = (input, {
+  state,
+  skipDefault = false
+}) => {
+  const theme = getTheme(state.config.theme);
+  let themeValue = theme(input); // Return the whole object when input ends with a dot
 
-  if (!references.theme) { return; }
-  var theme = getTheme(state.config.theme);
-  references.theme.forEach(function (path$$1) {
-    var ref = getTaggedTemplateValue(path$$1) || getFunctionValue(path$$1) || '';
-    var input = ref.input;
-    var parent = ref.parent;
-    throwIf(!parent, function () { return logGeneralError("The theme value doesn’t look right\n\nTry using it like this: theme`colors.black` or theme('colors.black')"); });
-    var themeValue = theme(input);
-    if (themeValue && themeValue.DEFAULT) { themeValue = themeValue.DEFAULT; }
-    throwIf(!themeValue, function () { return themeErrorNotFound({
-      theme: input.includes('.') ? get(theme(), trimInput(input)) : theme(),
-      input: input,
+  if (!themeValue && input.endsWith('.')) return getThemeValue(input.slice(0, -1), {
+    state,
+    skipDefault: true
+  }); // Return the default key when an object is found
+
+  if (!skipDefault && themeValue && themeValue.DEFAULT) themeValue = themeValue.DEFAULT;
+  themeValue = typeof themeValue === 'function' ? themeValue({}) : themeValue;
+  return [themeValue, theme];
+};
+
+const handleThemeFunction = ({
+  references,
+  t,
+  state
+}) => {
+  if (!references.theme) return; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
+
+  references.theme.forEach(path => {
+    const {
+      input,
+      parent
+    } = getTaggedTemplateValue(path) || getFunctionValue(path) || {
+      input: null,
+      parent: null
+    };
+    throwIf(!parent, () => logGeneralError("The theme value doesn’t look right\n\nTry using it like this: theme`colors.black` or theme('colors.black')"));
+    const [themeValue, theme] = getThemeValue(input, {
+      state
+    });
+    throwIf(!themeValue, () => themeErrorNotFound({
+      theme: input.includes('.') ? get__default["default"](theme(), trimInput(input)) : theme(),
+      input,
       trimInput: trimInput(input)
-    }); });
+    }));
     return replaceWithLocation(parent, astify(themeValue, t));
   });
 };
 
-var getDirectReplacement = function (ref) {
-  var mediaQuery = ref.mediaQuery;
-  var parent = ref.parent;
-  var t = ref.t;
-
-  return ({
+const getDirectReplacement = ({
+  mediaQuery,
+  parent,
+  t
+}) => ({
   newPath: parent,
   replacement: astify(mediaQuery, t)
 });
-};
 
-var handleDefinition = function (ref) {
-  var mediaQuery = ref.mediaQuery;
-  var parent = ref.parent;
-  var type = ref.type;
-  var t = ref.t;
-
-  return ({
-  TaggedTemplateExpression: function () {
-    var newPath = parent.findParent(function (x) { return x.isTaggedTemplateExpression(); });
-    var query = [(mediaQuery + " { "), " }"];
-    var quasis = [t.templateElement({
+const handleDefinition = ({
+  mediaQuery,
+  parent,
+  type,
+  t
+}) => ({
+  TaggedTemplateExpression() {
+    const newPath = parent.findParent(x => x.isTaggedTemplateExpression());
+    const query = [`${mediaQuery} { `, ` }`];
+    const quasis = [t.templateElement({
       raw: query[0],
       cooked: query[0]
     }, false), t.templateElement({
       raw: query[1],
       cooked: query[1]
     }, true)];
-    var expressions = [newPath.get('quasi').node];
-    var replacement = t.templateLiteral(quasis, expressions);
+    const expressions = [newPath.get('quasi').node];
+    const replacement = t.templateLiteral(quasis, expressions);
     return {
-      newPath: newPath,
-      replacement: replacement
+      newPath,
+      replacement
     };
   },
-  CallExpression: function () {
-    var newPath = parent.findParent(function (x) { return x.isCallExpression(); });
-    var value = newPath.get('arguments')[0].node;
-    var replacement = t.objectExpression([t.objectProperty(t.stringLiteral(mediaQuery), value)]);
+
+  CallExpression() {
+    const newPath = parent.findParent(x => x.isCallExpression());
+    const value = newPath.get('arguments')[0].node;
+    const replacement = t.objectExpression([t.objectProperty(t.stringLiteral(mediaQuery), value)]);
     return {
-      newPath: newPath,
-      replacement: replacement
+      newPath,
+      replacement
     };
   },
-  ObjectProperty: function () {
+
+  ObjectProperty() {
     // Remove brackets around keys so merges work with tailwind screens
     // styled.div({ [screen`2xl`]: tw`block`, ...tw`2xl:inline` })
     // https://github.com/ben-rogerson/twin.macro/issues/379
     parent.parent.computed = false;
     return getDirectReplacement({
-      mediaQuery: mediaQuery,
-      parent: parent,
-      t: t
+      mediaQuery,
+      parent,
+      t
     });
   },
-  ExpressionStatement: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  ArrowFunctionExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  ArrayExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  BinaryExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  LogicalExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  ConditionalExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  VariableDeclarator: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  TemplateLiteral: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); },
-  TSAsExpression: function () { return getDirectReplacement({
-    mediaQuery: mediaQuery,
-    parent: parent,
-    t: t
-  }); }
+
+  ExpressionStatement: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  ArrowFunctionExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  ArrayExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  BinaryExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  LogicalExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  ConditionalExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  VariableDeclarator: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  TemplateLiteral: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  }),
+  TSAsExpression: () => getDirectReplacement({
+    mediaQuery,
+    parent,
+    t
+  })
 })[type];
-};
 
-var validateScreenValue = function (ref) {
-  var screen = ref.screen;
-  var screens = ref.screens;
-  var value = ref.value;
+const validateScreenValue = ({
+  screen,
+  screens,
+  value
+}) => throwIf(!screen, () => logBadGood(`${value ? `“${value}” wasn’t found in your` : 'Specify a screen value from your'} tailwind config`, `Try one of these:\n\n${Object.entries(screens).map(([k, v]) => `screen.${k}\`...\` (${v})`).join('\n')}`));
 
-  return throwIf(!screen, function () { return logBadGood(((value ? ("“" + value + "” wasn’t found in your") : 'Specify a screen value from your') + " tailwind config"), ("Try one of these:\n\n" + (Object.entries(screens).map(function (ref) {
-  var k = ref[0];
-  var v = ref[1];
-
-  return ("screen." + k + "`...` (" + v + ")");
-  }).join('\n')))); });
-};
-
-var getMediaQuery = function (ref) {
-  var input = ref.input;
-  var screens = ref.screens;
-
+const getMediaQuery = ({
+  input,
+  screens
+}) => {
   validateScreenValue({
     screen: screens[input],
-    screens: screens,
+    screens,
     value: input
   });
-  var mediaQuery = "@media (min-width: " + (screens[input]) + ")";
-  return {
-    mediaQuery: mediaQuery
-  };
+  const mediaQuery = `@media (min-width: ${screens[input]})`;
+  return mediaQuery;
 };
 
-var handleScreenFunction = function (ref) {
-  var references = ref.references;
-  var t = ref.t;
-  var state = ref.state;
+const handleScreenFunction = ({
+  references,
+  t,
+  state
+}) => {
+  if (!references.screen) return;
+  const theme = getTheme(state.config.theme);
+  const screens = theme('screens'); // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-  if (!references.screen) { return; }
-  var theme = getTheme(state.config.theme);
-  var screens = theme('screens');
-  references.screen.forEach(function (path$$1) {
-    var ref = getTaggedTemplateValue(path$$1) || // screen.lg``
-    getFunctionValue(path$$1) || // screen.lg({ })
-    getMemberExpression(path$$1) || // screen`lg`
-    '';
-    var input = ref.input;
-    var parent = ref.parent;
-    var ref$1 = getMediaQuery({
-      input: input,
-      screens: screens
-    });
-    var mediaQuery = ref$1.mediaQuery;
-    var hasStyles = ref$1.hasStyles;
-    var definition = handleDefinition({
+  references.screen.forEach(path => {
+    const {
+      input,
+      parent
+    } = getTaggedTemplateValue(path) || // screen.lg``
+    getFunctionValue(path) || // screen.lg({ })
+    getMemberExpression(path) || {
+      // screen`lg`
+      input: null,
+      parent: null
+    };
+    const definition = handleDefinition({
       type: parent.parent.type,
-      hasStyles: hasStyles,
-      mediaQuery: mediaQuery,
-      parent: parent,
-      t: t
+      mediaQuery: getMediaQuery({
+        input,
+        screens
+      }),
+      parent,
+      t
     });
-    throwIf(!definition, function () { return logBadGood("The screen import doesn’t support that syntax", ("Try something like this:\n\n" + ([].concat( Object.keys(screens) ).map(function (f) { return ("screen." + f); }).join(', ')))); });
-    var ref$2 = definition();
-    var newPath = ref$2.newPath;
-    var replacement = ref$2.replacement;
+    throwIf(!definition, () => logBadGood(`The screen import doesn’t support that syntax`, `Try something like this:\n\n${[...Object.keys(screens)].map(f => `screen.${f}`).join(', ')}`));
+    const {
+      newPath,
+      replacement
+    } = definition();
     replaceWithLocation(newPath, replacement);
   });
 };
 
-var templateObject$3 = Object.freeze(["colors.gray.400"]);
-var templateObject$2 = Object.freeze(["fontFamily.mono"]);
-var templateObject$1 = Object.freeze(["fontFamily.sans"]);
-var templateObject = Object.freeze(["borderColor.DEFAULT"]);
-var globalPreflightStyles = function (ref) {
-  var theme = ref.theme;
-
-  return ({
+// Reference: https://github.com/tailwindlabs/tailwindcss/blob/master/src/css/preflight.css
+const globalPreflightStyles = ({
+  theme
+}) => ({
   '*, ::before, ::after': {
     boxSizing: 'border-box',
     borderWidth: '0',
     borderStyle: 'solid',
-    borderColor: theme(templateObject) || 'currentColor'
+    borderColor: theme`borderColor.DEFAULT` || 'currentColor'
   },
   '::before, ::after': {
     '--tw-content': "''"
@@ -4864,9 +4978,8 @@ var globalPreflightStyles = function (ref) {
     lineHeight: '1.5',
     WebkitTextSizeAdjust: '100%',
     MozTabSize: '4',
-    OTabSize: '4',
     tabSize: '4',
-    fontFamily: theme(templateObject$1) || "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, \"Noto Sans\", sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\""
+    fontFamily: theme`fontFamily.sans` || `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"`
   },
   body: {
     margin: '0',
@@ -4878,7 +4991,6 @@ var globalPreflightStyles = function (ref) {
     borderTopWidth: '1px'
   },
   'abbr:where([title])': {
-    WebkitTextDecoration: 'underline dotted',
     textDecoration: 'underline dotted'
   },
   'h1, h2, h3, h4, h5, h6': {
@@ -4893,7 +5005,7 @@ var globalPreflightStyles = function (ref) {
     fontWeight: 'bolder'
   },
   'code, kbd, samp, pre': {
-    fontFamily: theme(templateObject$2) || "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace",
+    fontFamily: theme`fontFamily.mono` || `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
     fontSize: '1em'
   },
   small: {
@@ -4978,15 +5090,15 @@ var globalPreflightStyles = function (ref) {
   },
   'input::-moz-placeholder, textarea::-moz-placeholder': {
     opacity: '1',
-    color: theme(templateObject$3) || '#9ca3af'
+    color: theme`colors.gray.400` || '#9ca3af'
   },
   'input:-ms-input-placeholder, textarea:-ms-input-placeholder': {
     opacity: '1',
-    color: theme(templateObject$3) || '#9ca3af'
+    color: theme`colors.gray.400` || '#9ca3af'
   },
   'input::placeholder, textarea::placeholder': {
     opacity: '1',
-    color: theme(templateObject$3) || '#9ca3af'
+    color: theme`colors.gray.400` || '#9ca3af'
   },
   'button, [role="button"]': {
     cursor: 'pointer'
@@ -5007,58 +5119,13 @@ var globalPreflightStyles = function (ref) {
     display: 'none'
   }
 });
-};
-
-var templateObject$4 = Object.freeze(["keyframes"]);
-var animation = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(animate)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var animationConfig = configValue('animation');
-
-  if (!animationConfig) {
-    errorSuggestions({
-      config: ['animation']
-    });
-  }
-
-  return {
-    animation: ("" + animationConfig + important)
-  };
-});
-var globalKeyframeStyles = function (ref) {
-  var theme = ref.theme;
-
-  var keyframes = theme(templateObject$4);
-  if (!keyframes) { return; }
-  var output = Object.entries(keyframes).reduce(function (result, ref) {
-    var obj;
-
-    var name = ref[0];
-    var frames = ref[1];
-    return (Object.assign({}, result,
-    ( obj = {}, obj[("@keyframes " + name)] = frames, obj )));
-  }, {});
-  return output;
-};
-
-var templateObject$3$1 = Object.freeze(["ringOffsetColor.DEFAULT"]);
-var templateObject$2$1 = Object.freeze(["ringOffsetWidth.DEFAULT"]);
-var templateObject$1$1 = Object.freeze(["ringColor.DEFAULT"]);
-var templateObject$5 = Object.freeze(["ringOpacity.DEFAULT"]);
-var globalRingStyles = function (ref) {
-  var theme = ref.theme;
-  var withAlpha = ref.withAlpha;
-
-  var ringOpacityDefault = theme(templateObject$5) || '0.5';
-  var ringColorDefault = withAlpha({
-    color: theme(templateObject$1$1) || ("rgb(147 197 253 / " + ringOpacityDefault + ")"),
+const globalRingStyles = ({
+  theme,
+  withAlpha
+}) => {
+  const ringOpacityDefault = theme`ringOpacity.DEFAULT` || '0.5';
+  const ringColorDefault = withAlpha({
+    color: theme`ringColor.DEFAULT` || `rgb(147 197 253 / ${ringOpacityDefault})`,
     pieces: {
       important: '',
       hasAlpha: true,
@@ -5068,102 +5135,15 @@ var globalRingStyles = function (ref) {
   return {
     '*, ::before, ::after': {
       '--tw-ring-inset': 'var(--tw-empty,/*!*/ /*!*/)',
-      '--tw-ring-offset-width': theme(templateObject$2$1) || '0px',
-      '--tw-ring-offset-color': theme(templateObject$3$1) || '#fff',
+      '--tw-ring-offset-width': theme`ringOffsetWidth.DEFAULT` || '0px',
+      '--tw-ring-offset-color': theme`ringOffsetColor.DEFAULT` || '#fff',
       '--tw-ring-color': ringColorDefault,
       '--tw-ring-offset-shadow': '0 0 #0000',
       '--tw-ring-shadow': '0 0 #0000'
     }
   };
 };
-
-var handleWidth = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('ringWidth');
-  if (!value) { return; }
-  return {
-    '--tw-ring-offset-shadow': "var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)",
-    '--tw-ring-shadow': ("var(--tw-ring-inset) 0 0 0 calc(" + value + " + var(--tw-ring-offset-width)) var(--tw-ring-color)"),
-    boxShadow: ("" + (["var(--tw-ring-offset-shadow)", "var(--tw-ring-shadow)", "var(--tw-shadow, 0 0 #0000)"].join(', ')) + important)
-  };
-};
-
-var ring = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getCoercedColor = properties.getCoercedColor;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(ring)-)([^]*)/);
-  if (classValue === 'inset') { return {
-    '--tw-ring-inset': 'inset'
-  }; }
-  var width = handleWidth({
-    configValue: function (config) { return getConfigValue(theme(config), classValue); },
-    important: important
-  });
-  if (width) { return width; }
-  var coercedColor = getCoercedColor('ringColor');
-  if (coercedColor) { return coercedColor; }
-  errorSuggestions({
-    config: ['ringWidth', 'ringColor']
-  });
-});
-
-var defaultBoxShadow = ["var(--tw-ring-offset-shadow, 0 0 #0000)", "var(--tw-ring-shadow, 0 0 #0000)", "var(--tw-shadow)"].join(', ');
-
-var makeBoxShadow = function (value, important) {
-  var ast = parseBoxShadowValue.parseBoxShadowValue(value);
-
-  for (var i = 0, list = ast; i < list.length; i += 1) {
-    // Don't override color if the whole shadow is a variable
-    var shadow = list[i];
-
-    if (!shadow.valid) {
-      continue;
-    }
-
-    shadow.color = 'var(--tw-shadow-color)';
-  }
-
-  return {
-    '--tw-shadow': value === 'none' ? '0 0 #0000' : value,
-    '--tw-shadow-colored': value === 'none' ? '0 0 #0000' : parseBoxShadowValue.formatBoxShadowValue(ast),
-    boxShadow: ("" + defaultBoxShadow + important)
-  };
-};
-
-var globalBoxShadowStyles = {
-  '*, ::before, ::after': {
-    '--tw-shadow': '0 0 #0000',
-    '--tw-shadow-colored': '0 0 #0000'
-  }
-};
-var boxShadow = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(shadow)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('boxShadow');
-
-  if (!value) {
-    return errorSuggestions({
-      config: 'boxShadow'
-    });
-  }
-
-  return makeBoxShadow(value, important);
-});
-
-var globalTransformStyles = {
+const globalTransformStyles = {
   '*, ::before, ::after': {
     '--tw-translate-x': '0',
     '--tw-translate-y': '0',
@@ -5174,19 +5154,19 @@ var globalTransformStyles = {
     '--tw-scale-y': '1'
   }
 };
-var globalTouchActionStyles = {
+const globalTouchActionStyles = {
   '*, ::before, ::after': {
     '--tw-pan-x': 'var(--tw-empty,/*!*/ /*!*/)',
     '--tw-pan-y': 'var(--tw-empty,/*!*/ /*!*/)',
     '--tw-pinch-zoom': 'var(--tw-empty,/*!*/ /*!*/)'
   }
 };
-var globalScrollSnapTypeStyles = {
+const globalScrollSnapTypeStyles = {
   '*, ::before, ::after': {
     '--tw-scroll-snap-strictness': 'proximity'
   }
 };
-var globalFontVariantNumericStyles = {
+const globalFontVariantNumericStyles = {
   '*, ::before, ::after': {
     '--tw-ordinal': 'var(--tw-empty,/*!*/ /*!*/)',
     '--tw-slashed-zero': 'var(--tw-empty,/*!*/ /*!*/)',
@@ -5195,7 +5175,13 @@ var globalFontVariantNumericStyles = {
     '--tw-numeric-fraction': 'var(--tw-empty,/*!*/ /*!*/)'
   }
 };
-var globalFilterStyles = {
+const globalBoxShadowStyles = {
+  '*, ::before, ::after': {
+    '--tw-shadow': '0 0 #0000',
+    '--tw-shadow-colored': '0 0 #0000'
+  }
+};
+const globalFilterStyles = {
   '*, ::before, ::after': {
     '--tw-blur': 'var(--tw-empty,/*!*/ /*!*/)',
     '--tw-brightness': 'var(--tw-empty,/*!*/ /*!*/)',
@@ -5208,7 +5194,7 @@ var globalFilterStyles = {
     '--tw-drop-shadow': 'var(--tw-empty,/*!*/ /*!*/)'
   }
 };
-var globalBackdropStyles = {
+const globalBackdropStyles = {
   '*, ::before, ::after': {
     '--tw-backdrop-blur': 'var(--tw-empty,/*!*/ /*!*/)',
     '--tw-backdrop-brightness': 'var(--tw-empty,/*!*/ /*!*/)',
@@ -5221,294 +5207,459 @@ var globalBackdropStyles = {
     '--tw-backdrop-sepia': 'var(--tw-empty,/*!*/ /*!*/)'
   }
 };
-var globalStyles = [globalPreflightStyles, globalKeyframeStyles, globalTransformStyles, globalTouchActionStyles, globalScrollSnapTypeStyles, globalFontVariantNumericStyles, globalRingStyles, globalBoxShadowStyles, globalFilterStyles, globalBackdropStyles];
+const globalKeyframeStyles = ({
+  theme
+}) => {
+  const keyframes = theme('keyframes');
+  if (!keyframes) return; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
 
-var getGlobalConfig = function (config) {
-  var usedConfig = config.global && config || userPresets[config.preset] || userPresets.emotion;
+  const output = Object.entries(keyframes).reduce((result, [name, frames]) => _extends({}, result, {
+    [`@keyframes ${name}`]: frames
+  }), {});
+  return output;
+};
+const globalStyles = [globalPreflightStyles, globalKeyframeStyles, globalTransformStyles, globalTouchActionStyles, globalScrollSnapTypeStyles, globalFontVariantNumericStyles, globalRingStyles, globalBoxShadowStyles, globalFilterStyles, globalBackdropStyles];
+
+const getGlobalConfig = config => {
+  const usedConfig = config.global && config || userPresets[config.preset] || userPresets.emotion;
   return usedConfig.global;
 };
 
-var addGlobalStylesImport = function (ref) {
-  var program = ref.program;
-  var t = ref.t;
-  var identifier = ref.identifier;
-  var config = ref.config;
-
-  var globalConfig = getGlobalConfig(config);
+const addGlobalStylesImport = ({
+  program,
+  t,
+  identifier,
+  config
+}) => {
+  const globalConfig = getGlobalConfig(config);
   return addImport({
     types: t,
-    program: program,
-    identifier: identifier,
+    program,
+    identifier,
     name: globalConfig.import,
     mod: globalConfig.from
   });
 };
 
-var getGlobalDeclarationTte = function (ref) {
-  var t = ref.t;
-  var stylesUid = ref.stylesUid;
-  var globalUid = ref.globalUid;
-  var styles = ref.styles;
-
-  return t.variableDeclaration('const', [t.variableDeclarator(globalUid, generateTaggedTemplateExpression({
-  t: t,
+const getGlobalDeclarationTte = ({
+  t,
+  stylesUid,
+  globalUid,
+  styles
+}) => t.variableDeclaration('const', [t.variableDeclarator(globalUid, generateTaggedTemplateExpression({
+  t,
   identifier: stylesUid,
-  styles: styles
+  styles
 }))]);
-};
 
-var getGlobalDeclarationProperty = function (props) {
-  var t = props.t;
-  var stylesUid = props.stylesUid;
-  var globalUid = props.globalUid;
-  var state = props.state;
-  var styles = props.styles;
-  var ttExpression = generateTaggedTemplateExpression({
-    t: t,
+const getGlobalDeclarationProperty = props => {
+  const {
+    t,
+    stylesUid,
+    globalUid,
+    state,
+    styles
+  } = props;
+  const ttExpression = generateTaggedTemplateExpression({
+    t,
     identifier: state.cssIdentifier,
-    styles: styles
+    styles
   });
-  var openingElement = t.jsxOpeningElement(t.jsxIdentifier(stylesUid.name), [t.jsxAttribute(t.jsxIdentifier('styles'), t.jsxExpressionContainer(ttExpression))], true);
-  var closingElement = t.jsxClosingElement(t.jsxIdentifier('close'));
-  var arrowFunctionExpression = t.arrowFunctionExpression([], t.jsxElement(openingElement, closingElement, [], true));
-  var code = t.variableDeclaration('const', [t.variableDeclarator(globalUid, arrowFunctionExpression)]);
+  const openingElement = t.jsxOpeningElement(t.jsxIdentifier(stylesUid.name), [t.jsxAttribute(t.jsxIdentifier('styles'), t.jsxExpressionContainer(ttExpression))], true);
+  const closingElement = t.jsxClosingElement(t.jsxIdentifier('close'));
+  const arrowFunctionExpression = t.arrowFunctionExpression([], t.jsxElement(openingElement, closingElement, [], true));
+  const code = t.variableDeclaration('const', [t.variableDeclarator(globalUid, arrowFunctionExpression)]);
   return code;
 };
 
-var kebabize = function (string) { return string.replace(/([\da-z]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase(); };
+const kebabize = string => string.replace(/([\da-z]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
 
-var convertCssObjectToString = function (cssObject) {
-  if (!cssObject) { return; }
-  return Object.entries(cssObject).map(function (ref) {
-    var k = ref[0];
-    var v = ref[1];
-
-    return typeof v === 'string' ? ((kebabize(k)) + ": " + v + ";") : (k + " {\n" + (convertCssObjectToString(v)) + "\n        }");
-  }).join('\n');
-};
-/**
- * Trim out classes defined within the selector
- * @param {object} data Input object from userPluginData
- * @returns {object} An object containing unpacked selectors
- */
+const convertCssObjectToString = cssObject => {
+  if (!cssObject) return;
+  return Object.entries(cssObject).map(([k, v]) => typeof v === 'string' ? `${kebabize(k)}: ${v};` : `${k} {
+${convertCssObjectToString(v)}
+        }`).join('\n');
+}; // Trim out classes defined within the selector
 
 
-var filterClassSelectors = function (ruleset) {
-  if (isEmpty(ruleset)) { return; }
-  return Object.entries(ruleset).reduce(function (result, ref) {
-    var obj;
-
-    var selector = ref[0];
-    var value = ref[1];
+const filterClassSelectors = ruleset => {
+  if (isEmpty$1(ruleset)) return;
+  return Object.entries(ruleset).reduce((result, [selector, value]) => {
     // Trim out the classes defined within the selector
     // Classes added using addBase have already been grabbed so they get filtered to avoid duplication
-    var filteredSelectorSet = selector.split(',').filter(function (s) {
-      if (isClass(s)) { return false; } // Remove sub selectors with a class as one of their keys
+    const filteredSelectorSet = selector.split(',').filter(s => {
+      if (isClass(s)) return false; // Remove sub selectors with a class as one of their keys
 
-      var subSelectors = Object.keys(value);
-      var hasSubClasses = subSelectors.some(function (selector) { return isClass(selector); });
-      if (hasSubClasses) { return false; }
+      const subSelectors = Object.keys(value);
+      const hasSubClasses = subSelectors.some(selector => isClass(selector));
+      if (hasSubClasses) return false;
       return true;
     }).join(',');
-    if (!filteredSelectorSet) { return result; }
-    return Object.assign({}, result,
-      ( obj = {}, obj[filteredSelectorSet] = value, obj ));
+    if (!filteredSelectorSet) return result;
+    return _extends({}, result, {
+      [filteredSelectorSet]: value
+    });
   }, {});
 };
 
-var handleGlobalStylesFunction = function (props) {
-  var references = props.references;
+const handleGlobalStylesFunction = props => {
+  const {
+    references
+  } = props;
   references.GlobalStyles && handleGlobalStylesJsx(props);
   references.globalStyles && handleGlobalStylesVariable(props);
 };
 
-var getGlobalStyles = function (ref) {
-  var state = ref.state;
-
+const getGlobalStyles = ({
+  state
+}) => {
   // Create the magic theme function
-  var theme = getTheme(state.config.theme); // Filter out classes as they're extracted as usable classes
+  const theme = getTheme(state.config.theme); // Filter out classes as they're extracted as usable classes
 
-  var strippedPlugins = filterClassSelectors(state.userPluginData && state.userPluginData.base);
-  var resolvedStyles = globalStyles.map(function (gs) { return typeof gs === 'function' ? gs({
-    theme: theme,
-    withAlpha: withAlpha
-  }) : gs; });
-  if (strippedPlugins) { resolvedStyles.push(strippedPlugins); }
-  var styles = resolvedStyles.reduce(function (result, item) { return deepMerge(result, item); }, {});
+  const strippedPlugins = filterClassSelectors(state.userPluginData && state.userPluginData.base);
+  const resolvedStyles = globalStyles.map(gs => typeof gs === 'function' ? gs({
+    theme,
+    withAlpha
+  }) : gs);
+  if (strippedPlugins) resolvedStyles.push(strippedPlugins);
+  const styles = resolvedStyles.reduce((result, item) => deepMerge__default["default"](result, item), {});
   return styles;
 };
 
-var handleGlobalStylesVariable = function (ref) {
-  var references = ref.references;
-  var state = ref.state;
+const handleGlobalStylesVariable = ({
+  references,
+  state
+}) => {
+  if (references.globalStyles.length === 0) return;
+  const styles = getGlobalStyles({
+    state
+  }); // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-  if (references.globalStyles.length === 0) { return; }
-  var styles = getGlobalStyles({
-    state: state
-  });
-  references.globalStyles.forEach(function (path$$1) {
-    var templateStyles = "(" + (JSON.stringify(styles)) + ")"; // `template` requires () wrapping
+  references.globalStyles.forEach(path => {
+    const templateStyles = `(${JSON.stringify(styles)})`; // `template` requires () wrapping
 
-    var convertedStyles = template(templateStyles, {
+    const convertedStyles = template__default["default"](templateStyles, {
       placeholderPattern: false
     })();
-    path$$1.replaceWith(convertedStyles);
+    path.replaceWith(convertedStyles);
   });
-}; // TODO: Deprecate GlobalStyles in v3
-// Replaced with globalStyles import as it's more adaptable
+};
 
-
-var handleGlobalStylesJsx = function (props) {
-  var references = props.references;
-  var program = props.program;
-  var t = props.t;
-  var state = props.state;
-  var config = props.config;
-  if (references.GlobalStyles.length === 0) { return; }
-  throwIf(references.GlobalStyles.length > 1, function () { return logGeneralError('Only one GlobalStyles import can be used'); });
-  var path$$1 = references.GlobalStyles[0];
-  var parentPath = path$$1.findParent(function (x) { return x.isJSXElement(); });
-  throwIf(!parentPath, function () { return logGeneralError('GlobalStyles must be added as a JSX element, eg: <GlobalStyles />'); });
-  var styles = convertCssObjectToString(getGlobalStyles({
-    state: state,
-    props: props
+const handleGlobalStylesJsx = props => {
+  const {
+    references,
+    program,
+    t,
+    state,
+    config
+  } = props;
+  if (references.GlobalStyles.length === 0) return;
+  throwIf(references.GlobalStyles.length > 1, () => logGeneralError('Only one GlobalStyles import can be used'));
+  const path = references.GlobalStyles[0];
+  const parentPath = path.findParent(x => x.isJSXElement());
+  throwIf(!parentPath, () => logGeneralError('GlobalStyles must be added as a JSX element, eg: <GlobalStyles />'));
+  const styles = convertCssObjectToString(getGlobalStyles({
+    state
   }));
-  var globalUid = generateUid('GlobalStyles', program);
-  var stylesUid = generateUid('globalImport', program);
-  var declarationData = {
-    t: t,
-    globalUid: globalUid,
-    stylesUid: stylesUid,
-    styles: styles,
-    state: state
+  const globalUid = generateUid('GlobalStyles', program);
+  const stylesUid = generateUid('globalImport', program);
+  const declarationData = {
+    t,
+    globalUid,
+    stylesUid,
+    styles,
+    state
   };
 
   if (state.isStyledComponents) {
-    var declaration = getGlobalDeclarationTte(declarationData);
+    const declaration = getGlobalDeclarationTte(declarationData);
     program.unshiftContainer('body', declaration);
-    path$$1.replaceWith(t.jSXIdentifier(globalUid.name));
+    path.replaceWith(t.jSXIdentifier(globalUid.name));
   }
 
   if (state.isEmotion) {
-    var declaration$1 = getGlobalDeclarationProperty(declarationData);
-    program.unshiftContainer('body', declaration$1);
-    path$$1.replaceWith(t.jSXIdentifier(globalUid.name)); // Check if the css import has already been imported
+    const declaration = getGlobalDeclarationProperty(declarationData);
+    program.unshiftContainer('body', declaration);
+    path.replaceWith(t.jSXIdentifier(globalUid.name)); // Check if the css import has already been imported
     // https://github.com/ben-rogerson/twin.macro/issues/313
 
     state.isImportingCss = !state.existingCssIdentifier;
   }
 
   if (state.isGoober) {
-    var declaration$2 = getGlobalDeclarationTte(declarationData);
-    program.unshiftContainer('body', declaration$2);
-    path$$1.replaceWith(t.jSXIdentifier(globalUid.name));
+    const declaration = getGlobalDeclarationTte(declarationData);
+    program.unshiftContainer('body', declaration);
+    path.replaceWith(t.jSXIdentifier(globalUid.name));
   }
 
-  throwIf(state.isStitches, function () { return logGeneralError('Use the “globalStyles” import with stitches'); });
+  throwIf(state.isStitches, () => logGeneralError('Use the “globalStyles” import with stitches'));
   addGlobalStylesImport({
     identifier: stylesUid,
-    t: t,
-    program: program,
-    config: config
+    t,
+    program,
+    config
   });
 };
 
-var isStaticClass = function (className) {
-  var staticConfig = get(staticStyles, [className, 'config']);
-  var staticConfigOutput = get(staticStyles, [className, 'output']);
-  var staticConfigKey = staticConfigOutput ? Object.keys(staticConfigOutput).shift() : null;
-  return Boolean(staticConfig || staticConfigKey);
-};
-
-var getDynamicProperties = function (className) {
-  // Get an array of matches (eg: ['col', 'col-span'])
-  var dynamicKeyMatches = Object.keys(dynamicStyles).filter(function (k) { return className.startsWith(k + '-') || className === k; }) || []; // Get the best match from the match array
-
-  var dynamicKey = dynamicKeyMatches.reduce(function (r, match) { return r.length < match.length ? match : r; }, []);
-  var dynamicConfig = dynamicStyles[dynamicKey] || {}; // See if the config property is defined
-
-  var isDynamicClass = Array.isArray(dynamicConfig) ? dynamicConfig.map(function (item) { return get(item, 'config') && !get(item, 'coerced'); }) : get(dynamicStyles, [dynamicKey, 'config']);
+const getCorePluginProperties = className => {
+  const matches = Object.entries(corePlugins).map(item => {
+    const [pluginName, config] = item;
+    if (className === pluginName) return item;
+    const startsWithPluginName = className.startsWith(String(pluginName) + '-');
+    if (!startsWithPluginName) return;
+    const supportsFurtherMatching = toArray(config).some(i => Boolean(i.config));
+    if (!supportsFurtherMatching) return;
+    return item;
+  }).filter(Boolean);
+  if (matches.length === 0) return {
+    isCorePluginClass: false
+  };
+  const longestMatch = matches.sort((a, b) => a[0].length > b[0].length ? -1 : 1)[0];
+  const [corePluginName, coreConfig] = longestMatch;
   return {
-    isDynamicClass: isDynamicClass,
-    dynamicConfig: dynamicConfig,
-    dynamicKey: dynamicKey
+    isCorePluginClass: true,
+    coreConfig: toArray(coreConfig),
+    corePluginName
   };
 };
 
-var isEmpty$1 = function (value) { return value === undefined || value === null || typeof value === 'object' && Object.keys(value).length === 0 || typeof value === 'string' && value.trim().length === 0; };
+const isEmpty = value => value === undefined || value === null || typeof value === 'object' && Object.keys(value).length === 0 || typeof value === 'string' && value.trim().length === 0;
 
-var getProperties = function (className, state, ref) {
-  var isCsOnly = ref.isCsOnly; if ( isCsOnly === void 0 ) isCsOnly = false;
-
-  if (!className) { return; }
-  var isCss = isShortCss(className);
-  if (isCsOnly || isCss) { return {
-    hasMatches: isCss,
-    type: 'css'
-  }; }
-  if (isArbitraryCss(className)) { return {
+const getProperties = (className, state, {
+  isCsOnly = false
+}) => {
+  if (!className) return;
+  const isShortCss$1 = isShortCss(className);
+  if (isCsOnly || isShortCss$1) return {
+    hasMatches: isShortCss$1,
+    type: 'shortCss'
+  };
+  if (isArbitraryCss(className)) return {
     hasMatches: true,
     type: 'arbitraryCss'
-  }; }
-  var isStatic = isStaticClass(className);
-  var ref$1 = getDynamicProperties(className);
-  var isDynamicClass = ref$1.isDynamicClass;
-  var dynamicConfig = ref$1.dynamicConfig;
-  var dynamicKey = ref$1.dynamicKey;
-  var corePlugin = dynamicConfig.plugin;
-  var hasUserPlugins = !isEmpty$1(state.config.plugins);
-  var type = isStatic && 'static' || isDynamicClass && 'dynamic' || corePlugin && 'corePlugin';
+  };
+  const {
+    isCorePluginClass,
+    coreConfig,
+    corePluginName
+  } = getCorePluginProperties(className);
   return {
-    type: type,
-    corePlugin: corePlugin,
-    hasMatches: Boolean(type),
-    dynamicKey: dynamicKey,
-    dynamicConfig: dynamicConfig,
-    hasUserPlugins: hasUserPlugins
+    type: isCorePluginClass && 'dynamic',
+    hasMatches: Boolean(isCorePluginClass),
+    hasUserPlugins: !isEmpty(state.config.plugins),
+    coreConfig,
+    corePluginName
   };
 };
 
-var stringifyScreen = function (config, screenName) {
-  var screen = get(config, ['theme', 'screens', screenName]);
+const precheckGroup = ({
+  classNameRaw
+}) => throwIf(classNameRaw === 'group', () => `\n\n"group" must be added as className:${logBadGood('tw`group`', '<div className="group">')}\nRead more at https://twinredirect.page.link/group\n`);
 
-  if (typeof screen === 'undefined') {
-    throw new Error(("Couldn’t find Tailwind the screen \"" + screenName + "\" in the Tailwind config"));
-  }
+const precheckPeer = ({
+  classNameRaw
+}) => throwIf(classNameRaw === 'peer', () => `\n\n"peer" must be added as className:${logBadGood('tw`peer`', '<div className="peer">')}\nRead more at https://twinredirect.page.link/peer\n`);
 
-  if (typeof screen === 'string') { return ("@media (min-width: " + screen + ")"); }
+const joinWithNoDoubleHyphens = arr => arr.join('-').replace(/-+/g, '-');
 
-  if (typeof screen.raw === 'string') {
-    return ("@media " + (screen.raw));
-  }
-
-  var string = (Array.isArray(screen) ? screen : [screen]).map(function (range) {
-    return [typeof range.min === 'string' ? ("(min-width: " + (range.min) + ")") : null, typeof range.max === 'string' ? ("(max-width: " + (range.max) + ")") : null].filter(Boolean).join(' and ');
-  }).join(', ');
-  return string ? ("@media " + string) : '';
+const preCheckPrefix = ({
+  pieces: {
+    className,
+    hasPrefix
+  },
+  state
+}) => {
+  if (isShortCss(className)) return;
+  const {
+    prefix
+  } = state.config;
+  if (hasPrefix === Boolean(prefix)) return;
+  const classSuggestion = joinWithNoDoubleHyphens([prefix, className]);
+  throwIf(!className.startsWith(prefix), () => `\n\n“${className}” should have a prefix:${logBadGood(className, classSuggestion)}`);
 };
 
-var orderByScreens = function (className, state) {
-  var classNames = className.match(/\S+/g) || [];
-  var screens = Object.keys(state.config.theme.screens);
+const preCheckNoHyphenSuffix = ({
+  pieces: {
+    className,
+    classNameRaw
+  }
+}) => {
+  if (isShortCss(className)) return;
+  throwIf(classNameRaw.endsWith('-'), () => logBadGood(`“${className}” should not have a '-' suffix`, `Change it to “${className.replace(/-*$/, '')}”`));
+};
 
-  var screenCompare = function (a, b) {
-    var A = a.includes(':') ? a.split(':')[0] : a;
-    var B = b.includes(':') ? b.split(':')[0] : b;
+const doPrechecks = (prechecks, context) => {
+  for (const precheck of prechecks) {
+    precheck(context);
+  }
+};
+
+var precheckExports = {
+  __proto__: null,
+  'default': doPrechecks,
+  precheckGroup: precheckGroup,
+  precheckPeer: precheckPeer,
+  preCheckPrefix: preCheckPrefix,
+  preCheckNoHyphenSuffix: preCheckNoHyphenSuffix
+};
+
+// Tim Sort provides accurate sorting in node < 11
+
+const compareBackdropProperty = (a, b) => {
+  // The order of grid properties matter when combined into a single object
+  // So here we move backdrop-filter to the beginning to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/363
+  const A = /(^|:)backdrop-filter/.test(a) ? -1 : 0;
+  const B = /(^|:)backdrop-filter/.test(b) ? -1 : 0;
+  return A - B;
+};
+
+const orderBackdropProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareBackdropProperty);
+  return classNames.join(' ');
+};
+
+const compareBgOpacityProperty = (a, b) => {
+  // The order of bg-opacity matters when combined into a single object
+  // So we move bg-opacity-xxx to the end to avoid being trumped by the bg color
+  const A = /(^|:)bg-opacity-/.test(a) ? 0 : -1;
+  const B = /(^|:)bg-opacity-/.test(b) ? 0 : -1;
+  return A - B;
+};
+
+const orderBgOpacityProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareBgOpacityProperty);
+  return classNames.join(' ');
+};
+
+const compareFilterProperty = (a, b) => {
+  // The order of grid properties matter when combined into a single object
+  // So here we move filter to the beginning to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/363
+  const A = /(^|:)filter/.test(a) ? -1 : 0;
+  const B = /(^|:)filter/.test(b) ? -1 : 0;
+  return A - B;
+};
+
+const orderFilterProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareFilterProperty);
+  return classNames.join(' ');
+};
+
+const compareGridProperty = (a, b) => {
+  // The order of grid properties matter when combined into a single object
+  // So here we move col-span-x to the beginning to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/363
+  const A = /(^|:)col-span-/.test(a) ? -1 : 0;
+  const B = /(^|:)col-span-/.test(b) ? -1 : 0;
+  return A - B;
+};
+
+const orderGridProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareGridProperty);
+  return classNames.join(' ');
+};
+
+const compareOrderRingProperty = (a, b) => {
+  // The order of ring properties matter when combined into a single object
+  // So here we move ring-opacity-xxx to the end to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/374
+  const A = /(^|:)ring-opacity-/.test(a) ? 0 : -1;
+  const B = /(^|:)ring-opacity-/.test(b) ? 0 : -1;
+  return A - B;
+};
+
+const orderRingProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareOrderRingProperty);
+  return classNames.join(' ');
+};
+
+const compareTransformProperty = (a, b) => {
+  // The order of transform properties matter when combined into a single object
+  // So here we move transform to the beginning to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/363
+  const A = /(^|:)transform(!|$)/.test(a) ? -1 : 0;
+  const B = /(^|:)transform(!|$)/.test(b) ? -1 : 0;
+  return A - B;
+};
+
+const orderTransformProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareTransformProperty);
+  return classNames.join(' ');
+};
+
+const compareTransition = (a, b) => {
+  // The order of transition properties matter when combined into a single object
+  // So here we move transition-x to the beginning to avoid being trumped
+  // https://github.com/ben-rogerson/twin.macro/issues/363
+  const A = /(^|:)transition(!|$)/.test(a) ? -1 : 0;
+  const B = /(^|:)transition(!|$)/.test(b) ? -1 : 0;
+  return A - B;
+};
+
+const orderTransitionProperty = className => {
+  const classNames = className.match(/\S+/g) || [];
+  timSort__default["default"].sort(classNames, compareTransition);
+  return classNames.join(' ');
+};
+
+const orderByScreens = (className, state) => {
+  const classNames = className.match(/\S+/g) || [];
+  const screens = Object.keys(state.config.theme.screens);
+
+  const screenCompare = (a, b) => {
+    const A = a.includes(':') ? a.split(':')[0] : a;
+    const B = b.includes(':') ? b.split(':')[0] : b;
     return screens.indexOf(A) < screens.indexOf(B) ? -1 : 1;
-  }; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
+  };
 
-
-  timSort.sort(classNames, screenCompare);
+  timSort__default["default"].sort(classNames, screenCompare);
   return classNames;
 };
 
-var variantDarkMode = function (ref) {
-  var hasGroupVariant = ref.hasGroupVariant;
-  var config = ref.config;
-  var errorCustom = ref.errorCustom;
+var ordering = {
+  __proto__: null,
+  orderBackdropProperty: orderBackdropProperty,
+  orderBgOpacityProperty: orderBgOpacityProperty,
+  orderFilterProperty: orderFilterProperty,
+  orderGridProperty: orderGridProperty,
+  orderRingProperty: orderRingProperty,
+  orderTransformProperty: orderTransformProperty,
+  orderTransitionProperty: orderTransitionProperty,
+  orderByScreens: orderByScreens
+};
 
-  var styles = {
+const stringifyScreen = (config, screenName) => {
+  const screen = get__default["default"](config, ['theme', 'screens', screenName]);
+
+  if (typeof screen === 'undefined') {
+    throw new Error(`Couldn’t find Tailwind the screen "${screenName}" in the Tailwind config`);
+  }
+
+  if (typeof screen === 'string') return `@media (min-width: ${screen})`;
+
+  if (typeof screen.raw === 'string') {
+    return `@media ${screen.raw}`;
+  }
+
+  const string = toArray(screen).map(range => [typeof range.min === 'string' ? `(min-width: ${range.min})` : null, typeof range.max === 'string' ? `(max-width: ${range.max})` : null].filter(Boolean).join(' and ')).join(', ');
+  return string ? `@media ${string}` : '';
+};
+
+const variantDarkMode = ({
+  hasGroupVariant,
+  config,
+  errorCustom
+}) => {
+  const styles = {
     // Media strategy: The default when you prepend with dark, tw`dark:block`
     media: '@media (prefers-color-scheme: dark)',
     // Class strategy: In your tailwind.config.js, add `{ dark: 'class' }
@@ -5523,12 +5674,12 @@ var variantDarkMode = function (ref) {
   return styles;
 };
 
-var variantLightMode = function (ref) {
-  var hasGroupVariant = ref.hasGroupVariant;
-  var config = ref.config;
-  var errorCustom = ref.errorCustom;
-
-  var styles = {
+const variantLightMode = ({
+  hasGroupVariant,
+  config,
+  errorCustom
+}) => {
+  const styles = {
     // Media strategy: The default when you prepend with light, tw`light:block`
     media: '@media (prefers-color-scheme: light)',
     // Class strategy: In your tailwind.config.js, add `{ light: 'class' }
@@ -5547,51 +5698,48 @@ var variantLightMode = function (ref) {
   return styles;
 };
 
-var prefixDarkLightModeClass = function (className, ref) {
-  var hasDarkVariant = ref.hasDarkVariant;
-  var hasLightVariant = ref.hasLightVariant;
-  var config = ref.config;
-
-  var themeVariant = hasDarkVariant && config('darkMode') === 'class' && ['dark ', 'dark'] || hasLightVariant && (config('lightMode') === 'class' || config('darkMode') === 'class') && ['light ', 'light'];
-  if (!themeVariant) { return className; }
-  return themeVariant.map(function (v) { return className.split(', ').map(function (cn) { return ("." + v + cn); }).join(', '); }).join(', ');
+const prefixDarkLightModeClass = (className, {
+  hasDarkVariant,
+  hasLightVariant,
+  config
+}) => {
+  const themeVariant = hasDarkVariant && config('darkMode') === 'class' && ['dark ', 'dark'] || hasLightVariant && (config('lightMode') === 'class' || config('darkMode') === 'class') && ['light ', 'light'];
+  if (!themeVariant) return className;
+  return themeVariant.map(v => className.split(', ').map(cn => `.${v}${cn}`).join(', ')).join(', ');
 };
 
-/* eslint-disable @typescript-eslint/restrict-plus-operands */
-function objectWithoutProperties$1 (obj, exclude) { var target = {}; for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k) && exclude.indexOf(k) === -1) target[k] = obj[k]; return target; }
+const _excluded$1 = ["variants", "state"];
 
-var createPeer = function (selector) {
-  var selectors = Array.isArray(selector) ? selector : [selector];
-  return selectors.map(function (s) { return (".peer:" + s + " ~ &"); }).join(', ');
+const createPeer = selector => {
+  const selectors = toArray(selector);
+  return selectors.map(s => `.peer:${s} ~ &`).join(', ');
 };
 
-var fullVariantConfig = variantConfig({
-  variantDarkMode: variantDarkMode,
-  variantLightMode: variantLightMode,
-  prefixDarkLightModeClass: prefixDarkLightModeClass,
-  createPeer: createPeer
+const fullVariantConfig = variantConfig({
+  variantDarkMode,
+  variantLightMode,
+  prefixDarkLightModeClass,
+  createPeer
 });
-/**
- * Validate variants against the variants config key
- */
 
-var validateVariants = function (ref) {
-  var variants = ref.variants;
-  var state = ref.state;
-  var rest$1 = objectWithoutProperties$1( ref, ["variants", "state"] );
-  var rest = rest$1;
+const getVariants = _ref => {
+  let {
+    variants,
+    state
+  } = _ref,
+      rest = _objectWithoutPropertiesLoose(_ref, _excluded$1);
 
-  if (!variants) { return []; }
-  var screens = get(state.config, ['theme', 'screens']);
-  var screenNames = Object.keys(screens);
-  return variants.map(function (variant) {
-    var isResponsive = screenNames && screenNames.includes(variant);
-    if (isResponsive) { return stringifyScreen(state.config, variant); }
-    var foundVariant = fullVariantConfig[variant];
+  if (!variants) return [];
+  const screens = get__default["default"](state.config, ['theme', 'screens']);
+  const screenNames = Object.keys(screens);
+  return variants.map(variant => {
+    const isResponsive = screenNames && screenNames.includes(variant);
+    if (isResponsive) return stringifyScreen(state.config, variant);
+    let foundVariant = fullVariantConfig[variant];
 
     if (!foundVariant) {
-      var arbitraryVariant = variant.match(/^\[(.+)]/);
-      if (arbitraryVariant) { foundVariant = arbitraryVariant[1]; }
+      const arbitraryVariant = variant.match(/^\[(.+)]/);
+      if (arbitraryVariant) foundVariant = arbitraryVariant[1];
     }
 
     if (!foundVariant) {
@@ -5603,19 +5751,25 @@ var validateVariants = function (ref) {
         throw new babelPluginMacros.MacroError(logGeneralError('The "not-only-child:" variant was deprecated in favor of "not-only:"'));
       }
 
-      var validVariants = Object.assign({}, (screenNames.length > 0 && {
-          'Screen breakpoints': screenNames
-        }),
-        {'Built-in variants': Object.keys(fullVariantConfig)});
+      const validVariants = _extends({}, screenNames.length > 0 && {
+        'Screen breakpoints': screenNames
+      }, {
+        'Built-in variants': Object.keys(fullVariantConfig)
+      });
+
       throw new babelPluginMacros.MacroError(logNoVariant(variant, validVariants));
     }
 
     if (typeof foundVariant === 'function') {
-      var context = Object.assign({}, rest,
-        {config: function (item) { return state.config[item] || null; },
-        errorCustom: function (message) {
+      const context = _extends({}, rest, {
+        config: item => state.config[item] || null,
+
+        errorCustom(message) {
           throw new babelPluginMacros.MacroError(logGeneralError(message));
-        }});
+        }
+
+      });
+
       foundVariant = foundVariant(context);
     }
 
@@ -5627,68 +5781,230 @@ var validateVariants = function (ref) {
  */
 
 
-var splitVariants = function (ref) {
-  var classNameRaw = ref.classNameRaw;
-  var state = ref.state;
-
-  var variantsList = [];
-  var variant;
-  var className = classNameRaw;
+const splitVariants = ({
+  classNameRaw,
+  state
+}) => {
+  const variantsList = [];
+  let variant;
+  let className = classNameRaw;
 
   while (variant !== null) {
     // Match arbitrary variants
-    variant = className.match(/^([\d_a-z-]+):|^\[.*?]:/);
+    variant = className.match(/^([\d<>_a-z-]+):|^\[.*?]:/);
 
     if (variant) {
       className = className.slice(variant[0].length);
-      variantsList.push(variant[0].slice(0, -1).replace(new RegExp(SPACE_ID, 'g'), ' '));
+      variantsList.push(replaceSpaceId(variant[0].slice(0, -1)));
     }
   } // dark: and light: variants
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-includes
 
 
-  var hasDarkVariant = variantsList.some(function (v) { return v === 'dark'; });
-  var hasLightVariant = variantsList.some(function (v) { return v === 'light'; });
+  const hasDarkVariant = variantsList.some(v => v === 'dark'); // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-includes
+
+  const hasLightVariant = variantsList.some(v => v === 'light');
 
   if (hasDarkVariant && hasLightVariant) {
     throw new babelPluginMacros.MacroError(logGeneralError('The light: and dark: variants can’t be used on the same element'));
   }
 
-  var hasGroupVariant = variantsList.some(function (v) { return v.startsWith('group-'); }); // Match the filtered variants
+  const hasGroupVariant = variantsList.some(v => v.startsWith('group-')); // Match the filtered variants
 
-  var variants = validateVariants({
+  const variants = getVariants({
     variants: variantsList,
-    state: state,
-    hasDarkVariant: hasDarkVariant,
-    hasLightVariant: hasLightVariant,
-    hasGroupVariant: hasGroupVariant
+    state,
+    hasDarkVariant,
+    hasLightVariant,
+    hasGroupVariant
   });
-  var hasVariants = variants.length > 0;
+  const hasVariants = variants.length > 0;
+  className = replaceSpaceId(className);
   return {
     classNameRawNoVariants: className,
-    className: className,
-    // TODO: Hoist the definition for className up, it's buried here
-    variants: variants,
-    hasVariants: hasVariants
+    className,
+    variants,
+    hasVariants,
+    hasVariantVisited: variants.includes(':visited')
   };
 };
 
-var getPeerValueFromVariant = function (variant) { return get(/\.peer:(.+) ~ &/.exec(variant), '1'); };
+const splitPrefix = props => {
+  const {
+    className,
+    state
+  } = props;
+  const {
+    prefix
+  } = state.config;
+  if (!prefix) return {
+    className,
+    hasPrefix: false
+  };
+  if (!className.startsWith(prefix)) return {
+    className,
+    hasPrefix: false
+  };
+  const newClassName = className.slice(prefix.length);
+  return {
+    className: newClassName,
+    hasPrefix: true
+  };
+};
+/**
+ * Split the negative from the className
+ */
+
+
+const splitNegative = ({
+  className
+}) => {
+  const hasNegative = !isShortCss(className) && className.slice(0, 1) === '-';
+  if (hasNegative) className = className.slice(1, className.length);
+  const negative = hasNegative ? '-' : '';
+  return {
+    className,
+    hasNegative,
+    negative
+  };
+};
+/**
+ * Split the important from the className
+ */
+
+
+const splitImportant = ({
+  className
+}) => {
+  const hasPrefix = className.slice(0, 1) === '!';
+  const hasSuffix = className.slice(-1) === '!';
+  const hasImportant = hasSuffix || hasPrefix;
+  if (hasImportant) className = hasSuffix ? className.slice(0, -1) : className.slice(1);
+  const important = hasImportant ? ' !important' : '';
+  return {
+    className,
+    hasImportant,
+    important
+  };
+};
+
+const getAlphaValue = alpha => Number.isInteger(Number(alpha)) ? Number(alpha) / 100 : alpha;
+
+const getLastSlashIndex = className => {
+  const match = className.match(/\/(?![^[]*])/g);
+  if (!match) return -1;
+  const lastSlashIndex = className.lastIndexOf(match[match.length - 1]);
+  return lastSlashIndex;
+}; // Keep after splitImportant
+
+
+const splitAlpha = props => {
+  const {
+    className
+  } = props;
+  const slashIdx = getLastSlashIndex(className);
+  throwIf(slashIdx === className.length - 1, () => logGeneralError(`The class “${className}” can’t end with a slash`));
+  if (slashIdx === -1) return {
+    className,
+    classNameNoSlashAlpha: className
+  };
+  const rawAlpha = className.slice(Number(slashIdx) + 1);
+  const hasAlphaArbitrary = Boolean(rawAlpha[0] === '[' && rawAlpha[rawAlpha.length - 1] === ']');
+  const hasMatchedAlpha = Boolean(!hasAlphaArbitrary && get__default["default"](props, 'state.config.theme.opacity')[rawAlpha]);
+  const hasAlpha = hasAlphaArbitrary || hasMatchedAlpha || false;
+  const context = {
+    hasAlpha,
+    hasAlphaArbitrary
+  };
+  if (!hasAlpha) return _extends({}, context, {
+    classNameNoSlashAlpha: className
+  });
+  if (hasAlphaArbitrary) return _extends({}, context, {
+    alpha: formatProp(rawAlpha.slice(1, -1)),
+    classNameNoSlashAlpha: className.slice(0, slashIdx)
+  }); // Opacity value has been matched in the config
+
+  return _extends({}, context, {
+    alpha: String(getAlphaValue(rawAlpha)),
+    classNameNoSlashAlpha: className.slice(0, slashIdx)
+  });
+};
+
+var pieces = {
+  __proto__: null,
+  splitVariants: splitVariants,
+  splitPrefix: splitPrefix,
+  splitImportant: splitImportant,
+  splitNegative: splitNegative,
+  splitAlpha: splitAlpha
+};
+
+const addContentClass = (classes, state) => {
+  const newClasses = []; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
+
+  classes.forEach(classSet => {
+    const shouldAddContent = /(?!.*:content($|\[))(before:|after:)/.test(classSet);
+    if (!shouldAddContent) return newClasses.push(classSet);
+    const variants = classSet.split(':').slice(0, -1).join(':'); // Avoid adding content if it's already in the new class list
+
+    if (!newClasses.some(c => c.startsWith(`${variants}:content`))) // Temp fix until emotion supports css variables with the content property
+      newClasses.push(`${variants}:content[${state.isEmotion ? '""' : 'var(--tw-content)'}]`);
+    newClasses.push(classSet);
+  });
+  return newClasses;
+};
+
+/**
+ * Add important to a value
+ * Only used for static and dynamic styles - not core plugins
+ */
+
+const mergeImportant = (style, hasImportant) => {
+  if (!hasImportant) return style; // Bail if the ruleset already has an important
+
+  if (JSON.stringify(style).includes(' !important')) return style;
+  return Object.entries(style).reduce((result, item) => {
+    const [key, value] = item;
+    if (typeof value === 'object') return mergeImportant(value, hasImportant); // Don't add important to css variables
+
+    const newValue = key.startsWith('--') ? value : `${value} !important`;
+    return deepMerge__default["default"](result, {
+      [key]: newValue
+    });
+  }, {});
+};
+
+const transformImportant = ({
+  style,
+  pieces: {
+    hasImportant
+  }
+}) => mergeImportant(style, hasImportant);
+
+const applyTransforms = context => {
+  if (!context.style) return;
+  return transformImportant(context);
+};
+
+const getPeerValueFromVariant = variant => get__default["default"](/\.peer:(.+) ~ &/.exec(variant), '1');
 /**
  * Combine peers when they are used in succession
  */
 
 
-var combinePeers = function (ref) {
-  var variants = ref.variants;
-
-  return variants.map(function (_, i) {
-  var isPeer = false;
-  var index = i;
-  var returnVariant;
-  var peerList = [];
+const combinePeers = ({
+  variants
+}) => variants.map((_, i) => {
+  let isPeer = false;
+  let index = i;
+  let returnVariant;
+  const peerList = [];
 
   do {
-    var peer = getPeerValueFromVariant(variants[index]);
+    const peer = getPeerValueFromVariant(variants[index]);
     isPeer = Boolean(peer);
 
     if (isPeer) {
@@ -5696,94 +6012,84 @@ var combinePeers = function (ref) {
       variants[index] = null;
       index = index + 1;
     } else {
-      returnVariant = peerList.length === 0 ? variants[index] : (".peer:" + (peerList.join(':')) + " ~ &");
+      returnVariant = peerList.length === 0 ? variants[index] : `.peer:${peerList.join(':')} ~ &`;
     }
   } while (isPeer);
 
   return returnVariant;
 }).filter(Boolean);
+
+const addSassyPseudo = ({
+  variants,
+  state
+}) => {
+  if (!state.configTwin.sassyPseudo) return variants;
+  return variants.map(v => v.replace(/(?<= ):|^:/g, '&:'));
 };
 
-var addSassyPseudo = function (ref) {
-  var variants = ref.variants;
-  var state = ref.state;
+const formatTasks$2 = [combinePeers, addSassyPseudo];
 
-  if (!state.configTwin.sassyPseudo) { return variants; }
-  return variants.map(function (v) { return v.replace(/(?<= ):|^:/g, '&:'); });
-};
+const addVariants = ({
+  results,
+  style,
+  pieces,
+  state
+}) => {
+  let {
+    variants,
+    hasVariants
+  } = pieces;
+  if (!hasVariants) return style;
 
-var formatTasks = [combinePeers, addSassyPseudo];
-
-var addVariants = function (ref) {
-  var results = ref.results;
-  var style = ref.style;
-  var pieces = ref.pieces;
-  var state = ref.state;
-
-  var variants = pieces.variants;
-  var hasVariants = pieces.hasVariants;
-  if (!hasVariants) { return style; }
-
-  for (var i = 0, list = formatTasks; i < list.length; i += 1) {
-    var task = list[i];
-
+  for (const task of formatTasks$2) {
     variants = task({
-      variants: variants,
-      state: state
+      variants,
+      state
     });
   }
 
-  var styleWithVariants = cleanSet(results, variants, Object.assign({}, get(styleWithVariants, variants, {}),
-    style));
+  let styleWithVariants; // eslint-disable-next-line prefer-const
+
+  styleWithVariants = cleanSet__default["default"](results, variants, _extends({}, get__default["default"](styleWithVariants, variants, {}), style));
   return styleWithVariants;
 };
 
-function findRightBracket(classes, start, end, brackets) {
-  if ( start === void 0 ) start = 0;
-  if ( end === void 0 ) end = classes.length;
-  if ( brackets === void 0 ) brackets = ['(', ')'];
+function findRightBracket(classes, start = 0, end = classes.length, brackets = ['(', ')']) {
+  let stack = 0;
 
-  var stack = 0;
-
-  for (var index = start; index < end; index++) {
+  for (let index = start; index < end; index++) {
     if (classes[index] === brackets[0]) {
       stack += 1;
     } else if (classes[index] === brackets[1]) {
-      if (stack === 0) { return; }
-      if (stack === 1) { return index; }
+      if (stack === 0) return;
+      if (stack === 1) return index;
       stack -= 1;
     }
   }
 }
 
-var sliceToSpace = function (str) {
-  var spaceIndex = str.indexOf(' ');
-  if (spaceIndex === -1) { return str; }
+const sliceToSpace = str => {
+  const spaceIndex = str.indexOf(' ');
+  if (spaceIndex === -1) return str;
   return str.slice(0, spaceIndex);
 }; // eslint-disable-next-line max-params
 
 
-function spreadVariantGroups(classes, context, importantContext, start, end) {
-  if ( context === void 0 ) context = '';
-  if ( importantContext === void 0 ) importantContext = false;
-  if ( start === void 0 ) start = 0;
-
-  if (classes === '') { return []; }
-  var results = [];
+function spreadVariantGroups(classes, context = '', importantContext = false, start = 0, end) {
+  if (classes === '') return [];
+  const results = [];
   classes = classes.slice(start, end).trim(); // variant / class / group
 
-  var reg = /(\[.*?]:|[\w-]+:)|([\w-./[\]]+!?)|\(|(\S+)/g;
-  var match;
-  var baseContext = context;
+  const reg = /(\[.*?]:|[\w-<>]+:)|([\w-./[\]]+!?)|\(|(\S+)/g;
+  let match;
+  const baseContext = context;
 
   while (match = reg.exec(classes)) {
-    var variant = match[1];
-    var className = match[2];
-    var weird = match[3];
+    const [, variant, className, weird] = match;
 
     if (variant) {
       // Replace arbitrary variant spaces with a placeholder to avoid incorrect splitting
-      var spaceReplacedVariant = variant.replace(/\s+/g, SPACE_ID);
+      const spaceReplacedVariant = variant.replace(/\s+/g, SPACE_ID);
       context += spaceReplacedVariant; // Skip empty classes
 
       if (/\s/.test(classes[reg.lastIndex])) {
@@ -5792,531 +6098,688 @@ function spreadVariantGroups(classes, context, importantContext, start, end) {
       }
 
       if (classes[reg.lastIndex] === '(') {
-        var closeBracket = findRightBracket(classes, reg.lastIndex);
-        throwIf(typeof closeBracket !== 'number', function () { return logGeneralError(("An ending bracket ')' wasn’t found for these classes:\n\n" + classes)); });
-        var importantGroup = classes[closeBracket + 1] === '!';
-        results.push.apply(results, spreadVariantGroups(classes, context, importantContext || importantGroup, reg.lastIndex + 1, closeBracket));
+        const closeBracket = findRightBracket(classes, reg.lastIndex);
+        throwIf(typeof closeBracket !== 'number', () => logGeneralError(`An ending bracket ')' wasn’t found for these classes:\n\n${classes}`));
+        const importantGroup = classes[closeBracket + 1] === '!';
+        results.push(...spreadVariantGroups(classes, context, importantContext || importantGroup, reg.lastIndex + 1, closeBracket));
         reg.lastIndex = closeBracket + (importantGroup ? 2 : 1);
         context = baseContext;
       }
     } else if (className && className.includes('[')) {
-      var closeBracket$1 = findRightBracket(classes, match.index, classes.length, ['[', ']']);
-      throwIf(typeof closeBracket$1 !== 'number', function () { return logGeneralError(("An ending bracket ']' wasn’t found for these classes:\n\n" + classes)); });
-      var importantGroup$1 = classes[closeBracket$1 + 1] === '!';
-      var cssClass = classes.slice(match.index, closeBracket$1 + 1);
-      var hasSlashOpacity = classes.slice(closeBracket$1 + 1, closeBracket$1 + 2) === '/';
-      var opacityValue = hasSlashOpacity ? sliceToSpace(classes.slice(closeBracket$1 + 1)) : ''; // Convert spaces in classes to a temporary string so the css won't be
+      const closeBracket = findRightBracket(classes, match.index, classes.length, ['[', ']']);
+      throwIf(typeof closeBracket !== 'number', () => logGeneralError(`An ending bracket ']' wasn’t found for these classes:\n\n${classes}`));
+      const importantGroup = classes[closeBracket + 1] === '!';
+      const cssClass = classes.slice(match.index, closeBracket + 1);
+      const hasSlashOpacity = classes.slice(closeBracket + 1, closeBracket + 2) === '/';
+      const opacityValue = hasSlashOpacity ? sliceToSpace(classes.slice(closeBracket + 1)) : ''; // Convert spaces in classes to a temporary string so the css won't be
       // split into multiple classes
 
-      var spaceReplacedClass = cssClass // Normalise the spacing - single spaces only
+      const spaceReplacedClass = cssClass // Normalise the spacing - single spaces only
       // Replace spaces with the space id stand-in
       // Remove newlines within the brackets to allow multiline values
       .replace(/\s+/g, SPACE_ID);
-      results.push(context + spaceReplacedClass + opacityValue + (importantGroup$1 || importantContext ? '!' : ''));
-      reg.lastIndex = closeBracket$1 + (importantGroup$1 ? 2 : 1) + opacityValue.length;
+      results.push(context + spaceReplacedClass + opacityValue + (importantGroup || importantContext ? '!' : ''));
+      reg.lastIndex = closeBracket + (importantGroup ? 2 : 1) + opacityValue.length;
       context = baseContext;
     } else if (className) {
-      var tail = !className.endsWith('!') && importantContext ? '!' : '';
+      const tail = !className.endsWith('!') && importantContext ? '!' : '';
       results.push(context + className + tail);
       context = baseContext;
     } else if (weird) {
       results.push(context + weird);
     } else {
-      var closeBracket$2 = findRightBracket(classes, match.index);
-      throwIf(typeof closeBracket$2 !== 'number', function () { return logGeneralError(("An ending bracket ')' wasn’t found for these classes:\n\n" + classes)); });
-      var importantGroup$2 = classes[closeBracket$2 + 1] === '!';
-      results.push.apply(results, spreadVariantGroups(classes, context, importantContext || importantGroup$2, match.index + 1, closeBracket$2));
-      reg.lastIndex = closeBracket$2 + (importantGroup$2 ? 2 : 1);
+      const closeBracket = findRightBracket(classes, match.index);
+      throwIf(typeof closeBracket !== 'number', () => logGeneralError(`An ending bracket ')' wasn’t found for these classes:\n\n${classes}`));
+      const importantGroup = classes[closeBracket + 1] === '!';
+      results.push(...spreadVariantGroups(classes, context, importantContext || importantGroup, match.index + 1, closeBracket));
+      reg.lastIndex = closeBracket + (importantGroup ? 2 : 1);
     }
   }
 
   return results;
 }
 
-var handleVariantGroups = function (classes) { return spreadVariantGroups(classes).join(' '); };
+const handleVariantGroups = classes => spreadVariantGroups(classes).join(' ');
 
-/**
- * Add important to a value
- * Only used for static and dynamic styles - not core plugins
- */
+const defaultBoxShadow = [`var(--tw-ring-offset-shadow, 0 0 #0000)`, `var(--tw-ring-shadow, 0 0 #0000)`, `var(--tw-shadow)`].join(', ');
 
-var mergeImportant = function (style, hasImportant) {
-  if (!hasImportant) { return style; } // Bail if the ruleset already has an important
+const makeBoxShadow = (value, important) => {
+  const ast = parseBoxShadowValue.parseBoxShadowValue(value);
 
-  if (JSON.stringify(style).includes(' !important')) { return style; }
-  return Object.entries(style).reduce(function (result, item) {
-    var obj;
+  for (const shadow of ast) {
+    // Don't override color if the whole shadow is a variable
+    if (!shadow.valid) {
+      continue;
+    }
 
-    var key = item[0];
-    var value = item[1];
-    if (typeof value === 'object') { return mergeImportant(value, hasImportant); } // Don't add important to css variables
-
-    var newValue = key.startsWith('--') ? value : (value + " !important");
-    return deepMerge(result, ( obj = {}, obj[key] = newValue, obj ));
-  }, {});
-};
-/**
- * Split the important from the className
- */
-
-
-var splitImportant = function (ref) {
-  var className = ref.className;
-
-  var hasPrefix = className.slice(0, 1) === '!';
-  var hasSuffix = className.slice(-1) === '!';
-  var hasImportant = hasSuffix || hasPrefix;
-
-  if (hasImportant) {
-    className = hasSuffix ? className.slice(0, -1) : className.slice(1);
+    shadow.color = 'var(--tw-shadow-color)';
   }
 
-  var important = hasImportant ? ' !important' : '';
   return {
-    className: className,
-    hasImportant: hasImportant,
-    important: important
+    '--tw-shadow': value === 'none' ? '0 0 #0000' : value,
+    '--tw-shadow-colored': value === 'none' ? '0 0 #0000' : parseBoxShadowValue.formatBoxShadowValue(ast),
+    boxShadow: `${defaultBoxShadow}${important}`
   };
 };
 
-/**
- * Split the negative from the className
- */
+const coercedTypeMap = {
+  any: ({
+    output,
+    value
+  }) => output(value),
 
-var splitNegative = function (ref) {
-  var className = ref.className;
+  color({
+    config,
+    value,
+    pieces,
+    forceReturn
+  }) {
+    const {
+      property,
+      variable
+    } = config;
+    if (typeof config.output === 'function') return config.output(value, {
+      withAlpha: toAlpha({
+        pieces,
+        property,
+        variable
+      })
+    });
+    if (!forceReturn && typeof value === 'string' && !dataTypes.color(value) && !isSpaceSeparatedColor(value)) return;
+    const properties = toArray(property);
+    let result = properties.map(p => typeof value === 'string' && value.startsWith('var(') ? null : toAlpha({
+      pieces,
+      variable,
+      property: p
+    })(value, pieces.alpha)).filter(Boolean);
+    if (result.length === 0) result = properties.map(p => ({
+      [p]: `${value}${pieces.important}`
+    })); // @ts-expect-error TODO: Investigate TS error
 
-  var hasNegative = !isShortCss(className) && className.slice(0, 1) === '-';
+    return deepMerge__default["default"](...result);
+  },
 
-  if (hasNegative) {
-    className = className.slice(1, className.length);
+  'line-width'({
+    config,
+    value,
+    theme,
+    output,
+    forceReturn
+  }) {
+    if (!forceReturn && typeof value === 'string' && !dataTypes.lineWidth(value) && !value.startsWith('var(')) return;
+    if (typeof config === 'function') return config(value, theme);
+    return output(value);
+  },
+
+  length({
+    config,
+    value,
+    theme,
+    forceReturn,
+    output
+  }) {
+    if (!forceReturn && typeof value === 'string' && !dataTypes.length(value) && !value.startsWith('var(')) return;
+    if (typeof config === 'function') return config(value, theme);
+    const {
+      variable
+    } = config;
+    return _extends({}, variable && {
+      [variable]: '0'
+    }, output(variable ? `calc(${value} * var(${variable}))` : value));
+  },
+
+  number({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.number(value)) return;
+    return output(value);
+  },
+
+  'absolute-size'({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.absoluteSize(value)) return;
+    return output(value);
+  },
+
+  'relative-size'({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.relativeSize(value)) return;
+    return output(value);
+  },
+
+  percentage({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.percentage(value)) return;
+    return output(value);
+  },
+
+  image({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (typeof value !== 'string') return;
+    if (!forceReturn && !dataTypes.image(value)) return;
+    return output(value);
+  },
+
+  url({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (typeof value !== 'string') return;
+    if (!forceReturn && !dataTypes.url(value) && !value.startsWith('var(')) return;
+    return output(value);
+  },
+
+  position({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.position(value)) return;
+    return output(value);
+  },
+
+  shadow({
+    value,
+    pieces,
+    forceReturn
+  }) {
+    if (!forceReturn && !dataTypes.shadow(value)) return;
+    return makeBoxShadow(value, pieces.important);
+  },
+
+  lookup: ({
+    config,
+    value,
+    theme
+  }) => typeof config === 'function' && config(value, theme),
+
+  'generic-name'({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (typeof value !== 'string') return;
+    if (!forceReturn && !dataTypes.genericName(value)) return;
+    return output(value);
+  },
+
+  'family-name'({
+    output,
+    value,
+    forceReturn
+  }) {
+    if (typeof value !== 'string') return;
+    if (!forceReturn && !dataTypes.familyName(value)) return;
+    return output(value);
   }
 
-  var negative = hasNegative ? '-' : '';
-  return {
-    className: className,
-    hasNegative: hasNegative,
-    negative: negative
-  };
 };
 
-var maybeAddNegative = function (value, negative) {
-  if (!negative) { return value; }
+const getTypeCoerced = (customValue, context) => {
+  const [explicitType, value] = splitOnFirst(customValue, ':');
+  if (value.length === 0) return;
+  const coercedConfig = getFlatCoercedConfigByProperty(context.property);
+  throwIf(!coercedConfig, () => logNotAllowed(context.pieces.className, `has no type support`, color => `Remove the type: ${color.success(`${context.property}-[${value}]`)}`));
+  const coercedTypes = Object.keys(coercedConfig);
+  throwIf(!coercedTypes.includes(explicitType), () => logNotAllowed(context.pieces.className, `can’t use “${explicitType}” as a type`, color => {
+    const suggestions = Object.entries(coercedConfig).map(([type, config]) => {
+      const dash = color.subdued('-');
+      return `${dash} ${context.property}-[${color.highlight(type)}:${value}] to use ${color.highlight(config.property)}`;
+    });
+    if (suggestions.length === 0) return;
+    return `Try ${suggestions.length > 1 ? 'one of these' : 'this'}:\n\n${suggestions.join('\n')}`;
+  }));
+  const config = coercedConfig[explicitType];
+  const result = getCoercedValueFromTypeMap(explicitType, {
+    config,
+    value,
+    pieces: context.pieces,
+    theme: context.theme,
+    forceReturn: true
+  }); // Force return defined coerced value as fallback
+  // eg: tw`indent-[lookup:10px]`
+
+  if (!result) return {
+    [config.property]: value
+  };
+  return result;
+};
+
+const applyStyleToProperty = (property, pieces) => style => {
+  const properties = Array.isArray(property) ? property : [property];
+  const styleValue = [pieces.negative, style].join('');
+  const result = Object.fromEntries(properties.map(p => [p, styleValue]));
+  return result;
+};
+
+const getCoercedValueFromTypeMap = (type, context) => {
+  context.output = applyStyleToProperty(context.config.property, context.pieces);
+  let extraStyles;
+
+  if (Array.isArray(context.value)) {
+    const [value, ...rest] = context.value;
+
+    if (rest.length === 1 && isObject(rest[0])) {
+      extraStyles = rest[0];
+      context.value = value;
+    } else {
+      context.value = context.value.join(', ');
+    }
+  }
+
+  let result = coercedTypeMap[type](context);
+  if (!result) return;
+  result = _extends({}, result, extraStyles);
+  throwIf(!['color', 'any'].includes(type) && context.pieces.hasAlpha, () => opacityErrorNotFound({
+    className: context.pieces.classNameRaw
+  }));
+  const {
+    wrapWith
+  } = context.config;
+  if (wrapWith) return {
+    [wrapWith]: result
+  };
+  return result;
+};
+
+const replaceThemeValue = (value, {
+  theme
+}) => {
+  const match = value.match(/theme\(["']?([^"']+)["']?\)/);
+  if (!match) return value;
+  const themeFunction = match[0];
+  const themeValue = theme(match[1]);
+  throwIf(!themeValue, () => logGeneralError(`No theme value found for “${match[1]}”`));
+  return value.replace(themeFunction, themeValue);
+};
+
+const maybeAddNegative = (value, negative) => {
+  if (!negative) return value;
 
   if (typeof value === 'string') {
-    if (value.startsWith('-')) { return value.slice(1); }
-    if (value.startsWith('var(')) { return ("calc(" + value + " * -1)"); }
+    if (value.startsWith('-')) return value.slice(1);
+    if (value.startsWith('var(')) return `calc(${value} * -1)`;
   }
 
-  if (isNumeric(value)) { return ("" + negative + value); }
+  if (isNumeric(value)) return `${negative}${value}`;
   return value;
 };
 
-var splitPrefix = function (props) {
-  var className = props.className;
-  var state = props.state;
-  var ref = state.config;
-  var prefix = ref.prefix;
-  if (!prefix) { return {
-    className: className,
-    hasPrefix: false
-  }; }
-  if (!className.startsWith(prefix)) { return {
-    className: className,
-    hasPrefix: false
-  }; }
-  var newClassName = className.slice(prefix.length);
-  return {
-    className: newClassName,
-    hasPrefix: true
-  };
-};
+const hasSupport = item => getCorePluginsByProperty(item).some(i => supportsArbitraryValues(i));
 
-var getAlphaValue = function (alpha) { return Number.isInteger(Number(alpha)) ? Number(alpha) / 100 : alpha; };
+const sortRatingHighestFirst = (a, b) => b.rating - a.rating;
 
-var getLastSlashIndex = function (className) {
-  var match = className.match(/\/(?![^[]*])/g);
-  if (!match) { return -1; }
-  var lastSlashIndex = className.lastIndexOf(match[match.length - 1]);
-  return lastSlashIndex;
-};
-
-var splitAlpha = function (props) {
-  var className = props.className;
-  var slashIdx = getLastSlashIndex(className);
-  throwIf(slashIdx === className.length - 1, function () { return logGeneralError(("The class “" + className + "” can’t end with a slash")); });
-  if (slashIdx === -1) { return {
-    className: className,
-    classNameNoSlashAlpha: className
-  }; }
-  var rawAlpha = className.slice(Number(slashIdx) + 1);
-  var hasAlphaArbitrary = Boolean(rawAlpha[0] === '[' && rawAlpha[rawAlpha.length - 1] === ']');
-  var hasMatchedAlpha = Boolean(!hasAlphaArbitrary && get(props, 'state.config.theme.opacity')[rawAlpha]);
-  var hasAlpha = hasAlphaArbitrary || hasMatchedAlpha || false;
-  var context = {
-    hasAlpha: hasAlpha,
-    hasAlphaArbitrary: hasAlphaArbitrary
-  };
-  if (!hasAlpha) { return Object.assign({}, context,
-    {classNameNoSlashAlpha: className}); }
-  if (hasAlphaArbitrary) { return Object.assign({}, context,
-    {alpha: formatProp(rawAlpha.slice(1, -1)),
-    classNameNoSlashAlpha: className.slice(0, slashIdx)}); } // Opacity value has been matched in the config
-
-  return Object.assign({}, context,
-    {alpha: String(getAlphaValue(rawAlpha)),
-    classNameNoSlashAlpha: className.slice(0, slashIdx)});
-};
-
-var splitters = [splitVariants, splitPrefix, splitNegative, splitImportant, splitAlpha // Keep after splitImportant
-];
-var getPieces = (function (context) {
-  var results = splitters.reduce(function (results, splitter) { return (Object.assign({}, results,
-    splitter(results))); }, context);
-  delete results.state;
-  return results;
+const getSuggestions = (results, {
+  color,
+  value
+}) => results.filter(r => r.rating > 0.25).sort(sortRatingHighestFirst).slice(0, 5).sort((a, b) => Number(hasSupport(b.target)) - Number(hasSupport(a.target))).map(s => {
+  const dash = color.subdued('-');
+  return `${dash} ${hasSupport(s.target) ? `${s.target}-[${value}] ${dash} ${color.success('✓ Arbitrary value support')}` : `${s.target} ${dash} ${color.highlight('Static class')}`}`;
 });
 
-var precheckGroup = function (ref) {
-  var classNameRaw = ref.classNameRaw;
-
-  return throwIf(classNameRaw === 'group', function () { return ("\n\n\"group\" must be added as className:" + (logBadGood('tw`group`', '<div className="group">')) + "\nRead more at https://twinredirect.page.link/group\n"); });
+const getErrorFeedback = (property, value) => {
+  const coercedConfig = getFlatCoercedConfigByProperty(property) || {};
+  const config = Object.entries(coercedConfig);
+  if (config.length > 0) return ['needs a type hint before the value', color => `Specify the type:\n\n${config.map(([pluginName, pluginConfig]) => {
+    const dash = color.subdued('-');
+    return `${dash} ${property}-[${color.highlight(pluginName)}:${value}] ${dash} ${pluginConfig.property}`;
+  }).join('\n')}`];
+  return ['was not found', color => {
+    const pluginKeys = Object.keys(corePlugins);
+    const results = stringSimilarity__default["default"].findBestMatch(property, pluginKeys).ratings;
+    const suggestions = getSuggestions(results, {
+      color,
+      value
+    });
+    return `Did you mean ${suggestions.length > 1 ? 'one of these' : 'this'}?\n\n${suggestions.join('\n')}`;
+  }];
 };
 
-var precheckPeer = function (ref) {
-  var classNameRaw = ref.classNameRaw;
-
-  return throwIf(classNameRaw === 'peer', function () { return ("\n\n\"peer\" must be added as className:" + (logBadGood('tw`peer`', '<div className="peer">')) + "\nRead more at https://twinredirect.page.link/peer\n"); });
+const getClassData = className => {
+  const [property, value] = splitOnFirst(className, '[');
+  return [property.slice(0, -1), // Remove the dash just before the brackets
+  value.slice(0, -1).replace(/_/g, ' ').trim() // Remove underscores, the last ']' and whitespace
+  ];
 };
 
-var joinWithNoDoubleHyphens = function (arr) { return arr.join('-').replace(/-+/g, '-'); };
+const getArbitraryStyle = (config, {
+  classValue,
+  theme,
+  pieces,
+  property,
+  state
+}) => {
+  if (!supportsArbitraryValues(config)) return; // Type-coerced arbitrary values, eg: text-[length:3px] / text-[color:red]
 
-var preCheckPrefix = function (ref) {
-  var ref_pieces = ref.pieces;
-  var className = ref_pieces.className;
-  var hasPrefix = ref_pieces.hasPrefix;
-  var state = ref.state;
-
-  if (isShortCss(className)) { return; }
-  var ref$1 = state.config;
-  var prefix = ref$1.prefix;
-  if (hasPrefix === Boolean(prefix)) { return; }
-  var classSuggestion = joinWithNoDoubleHyphens([prefix, className]);
-  throwIf(!className.startsWith(prefix), function () { return ("\n\n“" + className + "” should have a prefix:" + (logBadGood(className, classSuggestion))); });
-};
-
-var preCheckNoHyphenSuffix = function (ref) {
-  var ref_pieces = ref.pieces;
-  var className = ref_pieces.className;
-  var classNameRaw = ref_pieces.classNameRaw;
-
-  if (isShortCss(className)) { return; }
-  throwIf(classNameRaw.endsWith('-'), function () { return logBadGood(("“" + className + "” should not have a '-' suffix"), ("Change it to “" + (className.replace(/-*$/, '')) + "”")); });
-};
-
-var doPrechecks = function (prechecks, context) {
-  for (var i = 0, list = prechecks; i < list.length; i += 1) {
-    var precheck = list[i];
-
-    precheck(context);
-  }
-};
-
-var precheckExports = ({
-  default: doPrechecks,
-  precheckGroup: precheckGroup,
-  precheckPeer: precheckPeer,
-  preCheckPrefix: preCheckPrefix,
-  preCheckNoHyphenSuffix: preCheckNoHyphenSuffix
-});
-
-var gridCompare = function (a, b) {
-  // The order of grid properties matter when combined into a single object
-  // So here we move col-span-x to the beginning to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/363
-  var A = /(^|:)col-span-/.test(a) ? -1 : 0;
-  var B = /(^|:)col-span-/.test(b) ? -1 : 0;
-  return A - B;
-};
-
-var orderGridProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, gridCompare);
-  return classNames.join(' ');
-};
-
-var transitionCompare = function (a, b) {
-  // The order of transition properties matter when combined into a single object
-  // So here we move transition-x to the beginning to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/363
-  var A = /(^|:)transition(!|$)/.test(a) ? -1 : 0;
-  var B = /(^|:)transition(!|$)/.test(b) ? -1 : 0;
-  return A - B;
-};
-
-var orderTransitionProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, transitionCompare);
-  return classNames.join(' ');
-};
-
-var transformCompare = function (a, b) {
-  // The order of transform properties matter when combined into a single object
-  // So here we move transform to the beginning to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/363
-  var A = /(^|:)transform(!|$)/.test(a) ? -1 : 0;
-  var B = /(^|:)transform(!|$)/.test(b) ? -1 : 0;
-  return A - B;
-};
-
-var orderTransformProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, transformCompare);
-  return classNames.join(' ');
-};
-
-var ringCompare = function (a, b) {
-  // The order of ring properties matter when combined into a single object
-  // So here we move ring-opacity-xxx to the end to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/374
-  var A = /(^|:)ring-opacity-/.test(a) ? 0 : -1;
-  var B = /(^|:)ring-opacity-/.test(b) ? 0 : -1;
-  return A - B;
-};
-
-var orderRingProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, ringCompare);
-  return classNames.join(' ');
-};
-
-var bgOpacityCompare = function (a, b) {
-  // The order of bg-opacity matters when combined into a single object
-  // So we move bg-opacity-xxx to the end to avoid being trumped by the bg color
-  var A = /(^|:)bg-opacity-/.test(a) ? 0 : -1;
-  var B = /(^|:)bg-opacity-/.test(b) ? 0 : -1;
-  return A - B;
-};
-
-var orderBgOpacityProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, bgOpacityCompare);
-  return classNames.join(' ');
-};
-
-var compare = function (a, b) {
-  // The order of grid properties matter when combined into a single object
-  // So here we move backdrop-filter to the beginning to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/363
-  var A = /(^|:)backdrop-filter/.test(a) ? -1 : 0;
-  var B = /(^|:)backdrop-filter/.test(b) ? -1 : 0;
-  return A - B;
-};
-
-var orderBackdropProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, compare);
-  return classNames.join(' ');
-};
-
-var compare$1 = function (a, b) {
-  // The order of grid properties matter when combined into a single object
-  // So here we move filter to the beginning to avoid being trumped
-  // https://github.com/ben-rogerson/twin.macro/issues/363
-  var A = /(^|:)filter/.test(a) ? -1 : 0;
-  var B = /(^|:)filter/.test(b) ? -1 : 0;
-  return A - B;
-};
-
-var orderFilterProperty = function (className) {
-  var classNames = className.match(/\S+/g) || []; // Tim Sort provides accurate sorting in node < 11
-  // https://github.com/ben-rogerson/twin.macro/issues/20
-
-  timSort.sort(classNames, compare$1);
-  return classNames.join(' ');
-};
-
-var addContentClass = function (classes, state) {
-  var newClasses = [];
-  classes.forEach(function (classSet) {
-    var shouldAddContent = /(?!.*:content($|\[))(before:|after:)/.test(classSet);
-    if (!shouldAddContent) { return newClasses.push(classSet); }
-    var variants = classSet.split(':').slice(0, -1).join(':'); // Avoid adding content if it's already in the new class list
-
-    if (!newClasses.some(function (c) { return c.startsWith((variants + ":content")); })) // Temp fix until emotion supports css variables with the content property
-      { newClasses.push((variants + ":content[" + (state.isEmotion ? '""' : 'var(--tw-content)') + "]")); }
-    newClasses.push(classSet);
+  const typeCoerced = getTypeCoerced(classValue, {
+    theme,
+    pieces,
+    property
   });
-  return newClasses;
+  if (typeCoerced) return typeCoerced;
+  if (typeof config.output === 'function') return config.output({
+    value: maybeAddNegative(classValue, pieces.negative),
+    color: props => withAlpha(props),
+    negative: pieces.negative,
+    isEmotion: state.isEmotion,
+    theme
+  }); // Non-coerced class
+
+  if (config.coerced === undefined) {
+    const value = maybeAddNegative(classValue, pieces.negative);
+    return Array.isArray(config.property) ? // eslint-disable-next-line unicorn/prefer-object-from-entries
+    config.property.reduce((result, p) => _extends({}, result, {
+      [p]: value
+    }), {}) : {
+      [config.property]: value
+    };
+  }
+
+  if (!isObject(config.coerced)) return; // Arbitrary value matched with array of coerced types
+
+  const [coercedConfigResult] = getFirstValue(Object.entries(config.coerced), ([type, coercedConfig]) => getCoercedValueFromTypeMap(type, {
+    config: coercedConfig,
+    value: classValue,
+    pieces,
+    theme
+  }));
+  return coercedConfigResult;
 };
 
-var transformImportant = function (ref) {
-  var style = ref.style;
-  var hasImportant = ref.pieces.hasImportant;
+var handleArbitraryCss = (props => {
+  const [property, value] = getClassData(props.pieces.classNameNoSlashAlpha); // Replace theme values, eg: `bg-[theme(color.red.500)]`
 
-  return mergeImportant(style, hasImportant);
+  const classValue = replaceThemeValue(value, {
+    theme: props.theme
+  });
+  const config = getCorePluginsByProperty(property);
+  const [result, configUsed] = getFirstValue(config, p => getArbitraryStyle(p, _extends({}, props, {
+    property,
+    classValue
+  })));
+  throwIf(!result, () => logNotAllowed(props.pieces.classNameRawNoVariants, ...getErrorFeedback(property, classValue)));
+  throwIf(props.pieces.hasNegative && !configUsed.supportsNegativeValues, () => logBadGood(`“${props.pieces.classNameRaw}” doesn’t support a negative prefix`, `Apply the negative to the arbitrary value, eg: “${property}-[-5]”`));
+  return result;
+});
+
+var handleShortCss = (({
+  className,
+  theme
+}) => {
+  let [property, value] = splitOnFirst(className, '[');
+  property = property.startsWith('--') && property || // Retain css variables
+  camelize(property); // Remove the last ']' and whitespace
+
+  value = value.slice(0, -1).trim();
+  throwIf(!property, () => logBadGood(`“[${value}]” is missing the css property before the square brackets`, `Write it like this: marginTop[${value || '5rem'}]`));
+  const themeReplacedValue = replaceThemeValue(value, {
+    theme
+  });
+  return {
+    [property]: themeReplacedValue
+  };
+});
+
+const normalizeValue = value => {
+  if (['string', 'function'].includes(typeof value) || Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  logGeneralError(`The config value "${JSON.stringify(value)}" is unsupported - try a string, function, array, or number`);
 };
 
-var applyTransforms = function (context) {
-  var style = context.style;
-  var type = context.type;
-  if (!style) { return; }
-  var result = context.style;
-  if (type !== 'corePlugin') { result = transformImportant(context); }
+const splitAtDash = (twClass, fromEnd = 1) => {
+  const splitClass = twClass.split('-');
+  return {
+    firstPart: splitClass.slice(0, fromEnd * -1).join('-'),
+    lastPart: splitClass.slice(fromEnd * -1).join('-')
+  };
+};
+/**
+ * Searches the tailwindConfig
+ */
+
+
+const getConfigValue = (from, matcher) => {
+  const matchArray = toArray(matcher);
+  const [result] = getFirstValue(matchArray, match => getValueFromConfig(from, match));
   return result;
 };
 
-var mergeChecks = [// Match exact selector
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
+const getValueFromConfig = (from, matcher) => {
+  if (!from) return; // Match default value from current object
 
-  return key === ("" + className);
-}, // Match class selector (inc dot)
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
+  if (isEmpty$1(matcher)) {
+    if (isEmpty$1(from.DEFAULT)) return;
+    return normalizeValue(from.DEFAULT);
+  } // Match exact
 
-  return !key.includes('{{') && key.match(new RegExp(("(?:^|>|~|\\+|\\*| )\\." + className + "(?: |>|~|\\+|\\*|:|$)"), 'g'));
-}, // Match parent selector placeholder
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
 
-  return key.includes(("{{" + className + "}}"));
-}, // Match possible symbols after the selector (ex dot)
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
+  const match = from[matcher];
+  if (Array.isArray(match)) return normalizeValue(match);
+  if (['string', 'number', 'function'].includes(typeof match) || Array.isArray(match)) return normalizeValue(match); // Match a default value from child object
 
-  return [' ', ':', '>', '~', '+', '*'].some(function (suffix) { return key.startsWith(("" + className + suffix)); });
-}];
-
-var getMatches = function (ref) {
-  var className = ref.className;
-  var data = ref.data;
-  var sassyPseudo = ref.sassyPseudo;
-  var state = ref.state;
-
-  return Object.entries(data).reduce(function (result, item) {
-  var obj, obj$1;
-
-  var rawKey = item[0];
-  var value = item[1]; // Remove the prefix before attempting match
-
-  var ref = splitPrefix({
-    className: rawKey,
-    state: state
+  const defaultMatch = typeof match === 'object' && match.DEFAULT;
+  if (defaultMatch) return normalizeValue(defaultMatch);
+  const [result] = getFirstValue(matcher.split('-'), (_, {
+    index
+  }) => {
+    const {
+      firstPart,
+      lastPart
+    } = splitAtDash(matcher, Number(index) + 1);
+    const objectMatch = from[firstPart];
+    if (objectMatch && typeof objectMatch === 'object') return getConfigValue(objectMatch, lastPart);
   });
-  var key = ref.className;
+  return result;
+};
+
+const getDynamicStyle = (config, {
+  classValue,
+  theme,
+  pieces
+}) => {
+  // Array values loop over cooerced object - { coerced: { color: () => {}, length () => {} } }
+  if (config.coerced) {
+    const coerced = ([type, config], forceReturn) => getCoercedValueFromTypeMap(type, {
+      value: classValue,
+      config,
+      pieces,
+      theme,
+      forceReturn
+    });
+
+    const [result] = getFirstValue(Object.entries(config.coerced), (type, {
+      isLast
+    }) => coerced(type, isLast));
+    return result;
+  }
+
+  const value = Array.isArray(classValue) ? classValue.join(', ') : maybeAddNegative(maybeAddAlpha(classValue, {
+    pieces
+  }), pieces.negative);
+  return Array.isArray(config.property) ? // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
+  config.property.reduce((result, p) => _extends({}, result, {
+    [p]: value
+  }), {}) : {
+    [config.property]: value
+  };
+};
+
+var handleDynamic = (props => {
+  const {
+    theme,
+    pieces,
+    state,
+    corePluginName,
+    coreConfig
+  } = props;
+  const {
+    classNameRaw,
+    className,
+    classNameNoSlashAlpha
+  } = pieces;
+  const configSearch = [className.slice(Number(corePluginName.length) + 1)]; // eg: names including a slash, eg: h-1/5
+
+  if (className !== classNameNoSlashAlpha) configSearch.push(classNameNoSlashAlpha.slice(Number(corePluginName.length) + 1));
+  const [result, configUsed] = getFirstValue(coreConfig, c => {
+    const isStaticOutput = corePluginName === pieces.className && isObject(c.output);
+    if (isStaticOutput) return c.output;
+    const config = c.config && theme(c.config);
+    const classValue = config && getConfigValue(config, configSearch);
+    if (config && !classValue) return; // { property: value } determined via a function (eg: 'container')
+
+    if (typeof c.output === 'function') return c.output({
+      value: maybeAddNegative(classValue, pieces.negative),
+      isEmotion: state.isEmotion,
+      theme,
+      pieces
+    });
+    if (c.output) return;
+    return getDynamicStyle(c, _extends({}, props, {
+      classValue
+    }));
+  });
+  throwIf(!result || className.endsWith('-'), () => errorSuggestions({
+    pieces,
+    state,
+    config: coreConfig.map(item => item.config).filter(Boolean),
+    corePluginName
+  }));
+  throwIf(pieces.hasNegative && !configUsed.supportsNegativeValues, () => logBadGood(`“${classNameRaw}” doesn’t support a negative prefix`, [`Remove the negative prefix`, supportsArbitraryValues(corePluginName) && `apply an arbitrary value, eg: “${corePluginName}-[-5]” or “-${corePluginName}-[5]”`].filter(Boolean).join(' or ')));
+  throwIf(pieces.hasImportant && configUsed.supportsImportant === false, () => logBadGood(`“${classNameRaw}” doesn’t support the important modifier`, 'Remove the bang (!) from the class'));
+  return result;
+});
+
+const mergeChecks = [// Match exact selector
+({
+  key,
+  className
+}) => key === `${className}`, // Match class selector (inc dot)
+({
+  key,
+  className
+}) => !key.includes('{{') && key.match(new RegExp(`(?:^|>|~|\\+|\\*| )\\.${className}(?: |>|~|\\+|\\*|:|$)`, 'g')), // Match parent selector placeholder
+({
+  key,
+  className
+}) => key.includes(`{{${className}}}`), // Match possible symbols after the selector (ex dot)
+({
+  key,
+  className
+}) => [' ', ':', '>', '~', '+', '*'].some(suffix => key.startsWith(`${className}${suffix}`))];
+
+const getMatches = ({
+  className,
+  data,
+  sassyPseudo,
+  state
+}) => Object.entries(data).reduce((result, item) => {
+  const [rawKey, value] = item; // Remove the prefix before attempting match
+
+  let {
+    className: key
+  } = splitPrefix({
+    className: rawKey,
+    state
+  });
   key = key.replace(/\\/g, '');
-  var childValue = Object.values(value)[0];
-  var hasChildNesting = !Array.isArray(childValue) && typeof childValue === 'object';
+  const childValue = Object.values(value)[0];
+  const hasChildNesting = !Array.isArray(childValue) && typeof childValue === 'object';
 
   if (hasChildNesting) {
-    var matches = getMatches({
-      className: className,
+    const matches = getMatches({
+      className,
       data: value,
-      sassyPseudo: sassyPseudo,
-      state: state
+      sassyPseudo,
+      state
     });
-    if (!isEmpty(matches)) { return Object.assign({}, result,
-      ( obj = {}, obj[key] = matches, obj )); }
+    if (!isEmpty$1(matches)) return _extends({}, result, {
+      [key]: matches
+    });
   }
 
-  var shouldMergeValue = mergeChecks.some(function (item) { return item({
-    key: key,
-    value: value,
-    className: className,
-    data: data,
-    prefix: ''
-  }); });
+  const shouldMergeValue = mergeChecks.some(item => item({
+    key,
+    className
+  }));
 
   if (shouldMergeValue) {
-    var newKey = formatKey(key, {
-      className: className,
-      sassyPseudo: sassyPseudo
+    const newKey = formatKey(key, {
+      className,
+      sassyPseudo
     });
-    return newKey ? Object.assign({}, result,
-      ( obj$1 = {}, obj$1[newKey] = value, obj$1 )) : Object.assign({}, result,
-      value);
+    return newKey ? _extends({}, result, {
+      [newKey]: value
+    }) : _extends({}, result, value);
   }
 
   return result;
-}, {});
-}; // The key gets formatted with these checks
+}, {}); // The key gets formatted with these checks
 
 
-var formatTasks$1 = [function (ref) {
-  var key = ref.key;
-
-  return key.replace(/\\/g, '').trim();
-}, // Match exact selector
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
-
-  return key === ("." + className) ? '' : key;
-}, // Replace the parent selector placeholder
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
-
-  var parentSelectorIndex = key.indexOf(("{{" + className + "}}"));
-  var replacement = parentSelectorIndex > 0 ? '&' : '';
-  return key.replace(("{{" + className + "}}"), replacement);
+const formatTasks$1 = [({
+  key
+}) => key.replace(/\\/g, '').trim(), // Match exact selector
+({
+  key,
+  className
+}) => key === `.${className}` ? '' : key, // Replace the parent selector placeholder
+({
+  key,
+  className
+}) => {
+  const parentSelectorIndex = key.indexOf(`{{${className}}}`);
+  const replacement = parentSelectorIndex > 0 ? '&' : '';
+  return key.replace(`{{${className}}}`, replacement);
 }, // Replace the classname at start of selector (eg: &:hover) (postCSS supplies
 // flattened selectors so it looks like .blah:hover at this point)
-function (ref) {
-  var key = ref.key;
-  var className = ref.className;
+({
+  key,
+  className
+}) => key.startsWith(`.${className}`) ? key.slice(`.${className}`.length) : key, ({
+  key
+}) => key.trim(), // Add the parent selector at the start when it has the sassy pseudo enabled
+({
+  key,
+  sassyPseudo
+}) => sassyPseudo && key.startsWith(':') ? `&${key}` : key, // Remove the unmatched class wrapping
+({
+  key
+}) => key.replace(/{{/g, '.').replace(/}}/g, '')];
 
-  return key.startsWith(("." + className)) ? key.slice(("." + className).length) : key;
-}, function (ref) {
-  var key = ref.key;
+const formatKey = (selector, {
+  className,
+  sassyPseudo
+}) => {
+  if (selector === className) return;
+  let key = selector;
 
-  return key.trim();
-}, // Add the parent selector at the start when it has the sassy pseudo enabled
-function (ref) {
-  var key = ref.key;
-  var sassyPseudo = ref.sassyPseudo;
-
-  return sassyPseudo && key.startsWith(':') ? ("&" + key) : key;
-}, // Remove the unmatched class wrapping
-function (ref) {
-  var key = ref.key;
-
-  return key.replace(/{{/g, '.').replace(/}}/g, '');
-}];
-
-var formatKey = function (selector, ref) {
-  var className = ref.className;
-  var sassyPseudo = ref.sassyPseudo;
-  var prefix = ref.prefix;
-
-  if (selector === className) { return; }
-  var key = selector;
-
-  for (var i = 0, list = formatTasks$1; i < list.length; i += 1) {
-    var task = list[i];
-
+  for (const task of formatTasks$1) {
     key = task({
-      key: key,
-      className: className,
-      sassyPseudo: sassyPseudo,
-      prefix: prefix
+      key,
+      className,
+      sassyPseudo
     });
   }
 
@@ -6329,2002 +6792,135 @@ var formatKey = function (selector, ref) {
  */
 
 
-var normalizeUserPluginSelectors = function (data) { return Object.entries(data).reduce(function (result, ref) {
-  var selector = ref[0];
-  var value = ref[1];
+const normalizeUserPluginSelectors = data => Object.entries(data).reduce((result, [selector, value]) => {
+  const keys = selector.split(',').filter(s => isMediaQuery(s) ? Object.keys(value).some(selector => isClass(selector)) : isClass(s)) // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
+  .reduce((result, property) => _extends({}, result, {
+    [property]: value
+  }), {});
+  return _extends({}, result, keys);
+}, {});
 
-  var keys = selector.split(',').filter(function (s) { return isMediaQuery(s) ? Object.keys(value).some(function (selector) { return isClass(selector); }) : isClass(s); }).reduce(function (result, property) {
-    var obj;
-
-    return (Object.assign({}, result,
-    ( obj = {}, obj[property] = value, obj )));
-  }, {});
-  return Object.assign({}, result,
-    keys);
-}, {}); };
-
-var handleUserPlugins = (function (ref) {
-  var ref_state = ref.state;
-  var sassyPseudo = ref_state.configTwin.sassyPseudo;
-  var ref_state_userPluginData = ref_state.userPluginData;
-  var base = ref_state_userPluginData.base;
-  var components = ref_state_userPluginData.components;
-  var utilities = ref_state_userPluginData.utilities;
-  var state = ref.state;
-  var className = ref.className;
-
-  var result;
-  [base, components, utilities].find(function (rawData) {
-    var data = normalizeUserPluginSelectors(rawData);
-    var matches = getMatches({
-      className: className,
-      data: data,
-      sassyPseudo: sassyPseudo,
-      state: state
+var handleUserPlugins = (({
+  state: {
+    configTwin: {
+      sassyPseudo
+    },
+    userPluginData: {
+      base,
+      components,
+      utilities
+    }
+  },
+  state,
+  className
+}) => {
+  const [result] = getFirstValue([base, components, utilities], rawData => {
+    const data = normalizeUserPluginSelectors(rawData);
+    const matches = getMatches({
+      className,
+      data,
+      sassyPseudo,
+      state
     });
-    var hasMatches = !isEmpty(matches);
-    result = hasMatches ? matches : result;
-    return hasMatches;
+    if (isEmpty$1(matches)) return;
+    return matches;
   });
   return result;
 });
 
-var handleStatic = (function (ref) {
-  var pieces = ref.pieces;
+const _excluded = ["default"];
 
-  var className = pieces.className;
-  return get(staticStyles, [className, 'output']);
-});
-
-var normalizeValue = function (value) {
-  if (['string', 'function'].includes(typeof value) || Array.isArray(value)) {
-    return value;
-  }
-
-  if (typeof value === 'number') {
-    return String(value);
-  }
-
-  logGeneralError(("The config value \"" + (JSON.stringify(value)) + "\" is unsupported - try a string, function, array, or number"));
-};
-
-var splitAtDash = function (twClass, fromEnd) {
-  if ( fromEnd === void 0 ) fromEnd = 1;
-
-  var splitClass = twClass.split('-');
-  return {
-    firstPart: splitClass.slice(0, fromEnd * -1).join('-'),
-    lastPart: splitClass.slice(fromEnd * -1).join('-')
-  };
-};
-/**
- * Searches the tailwindConfig
- */
-
-
-var getConfigValue = function (from, matcher) {
-  if (!from) { return; } // Match default value from current object
-
-  if (isEmpty(matcher)) {
-    if (isEmpty(from.DEFAULT)) { return; }
-    return normalizeValue(from.DEFAULT);
-  } // Match exact
-
-
-  var match = from[matcher];
-
-  if (['string', 'number', 'function'].includes(typeof match) || Array.isArray(match)) {
-    return normalizeValue(match);
-  } // Match a default value from child object
-
-
-  var defaultMatch = typeof match === 'object' && match.DEFAULT;
-
-  if (defaultMatch) {
-    return normalizeValue(defaultMatch);
-  } // A weird loop is used below so the return busts out of the parent
-
-
-  var index = 1;
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-
-  for (var i$1 = 0, list = matcher.split('-'); i$1 < list.length; i$1 += 1) {
-
-    var ref = splitAtDash(matcher, index);
-    var firstPart = ref.firstPart;
-    var lastPart = ref.lastPart;
-    var objectMatch = from[firstPart];
-
-    if (objectMatch && typeof objectMatch === 'object') {
-      return getConfigValue(objectMatch, lastPart);
-    }
-
-    index = index + 1;
-  }
-};
-
-var styleify = function (ref) {
-  var obj;
-
-  var property = ref.property;
-  var value = ref.value;
-  var negative = ref.negative;
-  value = Array.isArray(value) ? value.join(', ') : maybeAddNegative(value, negative);
-  return Array.isArray(property) ? property.reduce(function (results, item) {
-    var obj;
-
-    return (Object.assign({}, results,
-    ( obj = {}, obj[item] = value, obj )));
-  }, {}) : ( obj = {}, obj[property] = value, obj );
-};
-
-var handleDynamic = (function (ref) {
-  var theme = ref.theme;
-  var pieces = ref.pieces;
-  var state = ref.state;
-  var dynamicKey = ref.dynamicKey;
-  var dynamicConfig = ref.dynamicConfig;
-
-  var className = pieces.className;
-  var negative = pieces.negative;
-
-  var getConfig = function (ref) {
-    var config = ref.config;
-    var configFallback = ref.configFallback;
-
-    return config && theme(config) || configFallback && theme(configFallback);
-  };
-
-  var styleSet = Array.isArray(dynamicConfig) ? dynamicConfig : [dynamicConfig];
-  var piece = className.slice(Number(dynamicKey.length) + 1);
-  var results;
-  styleSet.find(function (item) {
-    var value = getConfigValue(getConfig(item), piece);
-
-    if (value) {
-      results = typeof item.value === 'function' ? item.value({
-        value: value,
-        negative: negative,
-        isEmotion: state.isEmotion
-      }) : styleify({
-        property: item.prop,
-        value: value,
-        negative: negative
-      });
-    }
-
-    return value;
-  });
-  throwIf(!results || className.endsWith('-'), function () { return errorSuggestions({
-    pieces: pieces,
-    state: state,
-    config: styleSet.map(function (item) { return item.config; }) || [],
-    dynamicKey: dynamicKey
-  }); });
+const getPieces = context => {
+  const results = Object.values(pieces).reduce((results, splitter) => _extends({}, results, splitter(results)), context);
+  delete results.state;
   return results;
-});
-
-var getColor = function (ref) {
-  var matchConfigValue = ref.matchConfigValue;
-  var pieces = ref.pieces;
-
-  return function (colors) {
-  var result;
-  colors.find(function (ref) {
-    var matchStart = ref.matchStart;
-    var property = ref.property;
-    var configSearch = ref.configSearch;
-    var opacityVariable = ref.opacityVariable;
-    var useSlashAlpha = ref.useSlashAlpha;
-
-    // Disable slash alpha matching when a variable is supplied.
-    // For classes that use opacity classes 'bg-opacity-50'.
-    if (useSlashAlpha === undefined) {
-      useSlashAlpha = !opacityVariable;
-    }
-
-    var color$$1 = matchConfigValue(configSearch, ("(?<=(" + matchStart + "-))([^]*)" + (useSlashAlpha ? "(?=/)" : '')));
-    if (!color$$1) { return false; }
-    var values = Array.isArray(property) ? property : [property];
-    var res = values.map(function (p) { return withAlpha({
-      color: color$$1,
-      property: p,
-      pieces: pieces,
-      useSlashAlpha: useSlashAlpha,
-      variable: opacityVariable
-    }); }).filter(Boolean);
-    if (res.length === 0) { return false; }
-    result = deepMerge.apply(void 0, res);
-    return true;
-  });
-  return result;
-};
-};
-
-var accentColor = (function (properties) {
-  var coercedColor = properties.getCoercedColor('accentColor');
-  if (coercedColor) { return coercedColor; }
-  return properties.errors.errorSuggestions({
-    config: 'accentColor'
-  });
-});
-
-var backdropBlur = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-blur)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropBlur');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropBlur']
-    });
-  }
-
-  var backdropBlurValue = Array.isArray(value) ? value.map(function (v) { return ("blur(" + v + ")"); }).join(' ') : ("blur(" + value + ")");
-  return {
-    '--tw-backdrop-blur': backdropBlurValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropBrightness = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-brightness)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropBrightness');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropBrightness']
-    });
-  }
-
-  var backdropBrightnessValue = Array.isArray(value) ? value.map(function (v) { return ("brightness(" + v + ")"); }).join(' ') : ("brightness(" + value + ")");
-  return {
-    '--tw-backdrop-brightness': backdropBrightnessValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropContrast = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-contrast)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropContrast');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropContrast']
-    });
-  }
-
-  var backdropContrastValue = Array.isArray(value) ? value.map(function (v) { return ("contrast(" + v + ")"); }).join(' ') : ("contrast(" + value + ")");
-  return {
-    '--tw-backdrop-contrast': backdropContrastValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropGrayscale = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-grayscale)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropGrayscale');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropGrayscale']
-    });
-  }
-
-  var backdropGrayscaleValue = Array.isArray(value) ? value.map(function (v) { return ("grayscale(" + v + ")"); }).join(' ') : ("grayscale(" + value + ")");
-  return {
-    '--tw-backdrop-grayscale': backdropGrayscaleValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropHueRotate = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var properties_pieces = properties.pieces;
-  var negative = properties_pieces.negative;
-  var important = properties_pieces.important;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var classValue = match(/(?<=(backdrop-hue-rotate)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropHueRotate');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropHueRotate']
-    });
-  }
-
-  var backdrophueRotateValue = Array.isArray(value) ? value.map(function (v) { return ("hue-rotate(" + negative + v + ")"); }).join(' ') : ("hue-rotate(" + negative + value + ")");
-  return {
-    '--tw-backdrop-hue-rotate': backdrophueRotateValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropInvert = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-invert)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropInvert');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropInvert']
-    });
-  }
-
-  var backdropInvertValue = Array.isArray(value) ? value.map(function (v) { return ("invert(" + v + ")"); }).join(' ') : ("invert(" + value + ")");
-  return {
-    '--tw-backdrop-invert': backdropInvertValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropOpacity = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-opacity)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropOpacity');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropOpacity']
-    });
-  }
-
-  var backdropOpacityValue = Array.isArray(value) ? value.map(function (v) { return ("opacity(" + v + ")"); }).join(' ') : ("opacity(" + value + ")");
-  return {
-    '--tw-backdrop-opacity': backdropOpacityValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropSaturate = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-saturate)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropSaturate');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropSaturate']
-    });
-  }
-
-  var backdropSaturateValue = Array.isArray(value) ? value.map(function (v) { return ("saturate(" + v + ")"); }).join(' ') : ("saturate(" + value + ")");
-  return {
-    '--tw-backdrop-saturate': backdropSaturateValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var backdropSepia = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(backdrop-sepia)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('backdropSepia');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['backdropSepia']
-    });
-  }
-
-  var backdropSepiaValue = Array.isArray(value) ? value.map(function (v) { return ("sepia(" + v + ")"); }).join(' ') : ("sepia(" + value + ")");
-  return {
-    '--tw-backdrop-sepia': backdropSepiaValue,
-    backdropFilter: ("var(--tw-backdrop-filter)" + important)
-  };
-});
-
-var handleSize = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('backgroundSize');
-  if (!value) { return; }
-  return {
-    backgroundSize: ("" + value + important)
-  };
-};
-
-var handlePosition = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('backgroundPosition');
-  if (!value) { return; }
-  return {
-    backgroundPosition: ("" + value + important)
-  };
-};
-
-var handleImage = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('backgroundImage');
-  if (!value) { return; }
-  return {
-    backgroundImage: ("" + value + important)
-  };
-};
-
-var bg = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var getCoercedColor = properties.getCoercedColor;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var coercedColor = getCoercedColor('backgroundColor');
-  if (coercedColor) { return coercedColor; }
-  var classValue = match(/(?<=(bg)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var size = handleSize({
-    configValue: configValue,
-    important: important
-  });
-  if (size) { return size; }
-  var position = handlePosition({
-    configValue: configValue,
-    important: important
-  });
-  if (position) { return position; }
-  var image = handleImage({
-    configValue: configValue,
-    important: important
-  });
-  if (image) { return image; }
-  errorSuggestions({
-    config: ['backgroundColor', 'backgroundSize', 'backgroundPosition', 'backgroundImage']
-  });
-});
-
-var blur = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(blur)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('blur');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['blur']
-    });
-  }
-
-  var blurValue = Array.isArray(value) ? value.map(function (v) { return ("blur(" + v + ")"); }).join(' ') : ("blur(" + value + ")");
-  return {
-    '--tw-blur': blurValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var border = (function (properties) {
-  var getCoercedLength = properties.getCoercedLength;
-  var getCoercedColor = properties.getCoercedColor;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var coerced = properties.dynamicConfig.coerced;
-  var coercedLength = getCoercedLength(coerced.length);
-  if (coercedLength) { return coercedLength; }
-  var coercedColor = getCoercedColor(coerced.color);
-  if (coercedColor) { return coercedColor; }
-  errorSuggestions({
-    config: Object.values(coerced).map(function (v) { return v.property; })
-  });
-});
-
-var brightness = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(brightness)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('brightness');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['brightness']
-    });
-  }
-
-  var brightnessValue = Array.isArray(value) ? value.map(function (v) { return ("brightness(" + v + ")"); }).join(' ') : ("brightness(" + value + ")");
-  return {
-    '--tw-brightness': brightnessValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var caretColor = (function (properties) {
-  var coercedColor = properties.getCoercedColor('caretColor');
-  if (!coercedColor) { properties.errors.errorSuggestions({
-    config: 'caretColor'
-  }); }
-  return coercedColor;
-});
-
-var contrast = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(contrast)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('contrast');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['contrast']
-    });
-  }
-
-  var contrastValue = Array.isArray(value) ? value.map(function (v) { return ("contrast(" + v + ")"); }).join(' ') : ("contrast(" + value + ")");
-  return {
-    '--tw-contrast': contrastValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var properties = function (type) { return ({
-  left: (type + "Left"),
-  right: (type + "Right")
-}); };
-
-var getSpacingFromArray = function (ref) {
-  var obj;
-
-  var values = ref.values;
-  var left = ref.left;
-  var right = ref.right;
-  if (!Array.isArray(values)) { return; }
-  var valueLeft = values[0];
-  var valueRight = values[1];
-  return ( obj = {}, obj[left] = valueLeft, obj[right] = valueRight, obj );
-};
-
-var getSpacingStyle = function (type, values, key) {
-  var obj;
-
-  if (Array.isArray(values) || typeof values !== 'object') { return; }
-  var propertyValue = values[key] || {};
-  if (isEmpty(propertyValue)) { return; }
-  var objectArraySpacing = getSpacingFromArray(Object.assign({}, {values: propertyValue},
-    properties(type)));
-  if (objectArraySpacing) { return objectArraySpacing; }
-  return ( obj = {}, obj[properties(type).left] = propertyValue, obj[properties(type).right] = propertyValue, obj );
-};
-
-var container = (function (ref) {
-  var ref_pieces = ref.pieces;
-  var hasImportant = ref_pieces.hasImportant;
-  var hasNegative = ref_pieces.hasNegative;
-  var ref_errors = ref.errors;
-  var errorNoImportant = ref_errors.errorNoImportant;
-  var errorNoNegatives = ref_errors.errorNoNegatives;
-  var theme = ref.theme;
-
-  hasImportant && errorNoImportant();
-  hasNegative && errorNoNegatives();
-  var ref$1 = theme();
-  var container = ref$1.container;
-  var screensRaw = ref$1.screens;
-  var padding = container.padding;
-  var margin = container.margin;
-  var center = container.center;
-  var screens = container.screens || screensRaw;
-  var mediaScreens = Object.entries(screens).reduce(function (accumulator, ref) {
-    var obj;
-
-    var key = ref[0];
-    var rawValue = ref[1];
-    var value = typeof rawValue === 'object' ? rawValue.min || rawValue['min-width'] : rawValue;
-    return Object.assign({}, accumulator,
-      ( obj = {}, obj[("@media (min-width: " + value + ")")] = Object.assign({}, {maxWidth: value},
-        (padding && getSpacingStyle('padding', padding, key)),
-        (!center && margin && getSpacingStyle('margin', margin, key))), obj ));
-  }, {});
-  var paddingStyles = Array.isArray(padding) ? getSpacingFromArray(Object.assign({}, {values: padding},
-    properties('padding'))) : typeof padding === 'object' ? getSpacingStyle('padding', padding, 'DEFAULT') : {
-    paddingLeft: padding,
-    paddingRight: padding
-  };
-  var marginStyles = Array.isArray(margin) ? getSpacingFromArray(Object.assign({}, {values: margin},
-    properties('margin'))) : typeof margin === 'object' ? getSpacingStyle('margin', margin, 'DEFAULT') : {
-    marginLeft: margin,
-    marginRight: margin
-  }; // { center: true } overrides any margin styles
-
-  if (center) { marginStyles = {
-    marginLeft: 'auto',
-    marginRight: 'auto'
-  }; }
-  return Object.assign({}, {width: '100%'},
-    paddingStyles,
-    marginStyles,
-    mediaScreens);
-});
-
-var handleOpacity = function (ref) {
-  var configValue = ref.configValue;
-
-  var opacity = configValue('divideOpacity') || configValue('opacity');
-  if (!opacity) { return; }
-  return {
-    '> :not([hidden]) ~ :not([hidden])': {
-      '--tw-divide-opacity': ("" + opacity)
-    }
-  };
-};
-
-var handleWidth$1 = function (ref) {
-  var obj;
-
-  var configValue = ref.configValue;
-  var ref_pieces = ref.pieces;
-  var negative = ref_pieces.negative;
-  var className = ref_pieces.className;
-  var important = ref_pieces.important;
-  var width = configValue('divideWidth');
-  if (!width) { return; }
-  var value = "" + negative + (addPxTo0(width));
-  var isDivideX = className.startsWith('divide-x');
-  var cssVariableKey = isDivideX ? '--tw-divide-x-reverse' : '--tw-divide-y-reverse';
-  var borderFirst = "calc(" + value + " * var(" + cssVariableKey + "))" + important;
-  var borderSecond = "calc(" + value + " * calc(1 - var(" + cssVariableKey + ")))" + important;
-  var styleKey = isDivideX ? {
-    borderRightWidth: borderFirst,
-    borderLeftWidth: borderSecond
-  } : {
-    borderTopWidth: borderSecond,
-    borderBottomWidth: borderFirst
-  };
-  var innerStyles = Object.assign(( obj = {}, obj[cssVariableKey] = '0', obj ),
-    styleKey);
-  return {
-    '> :not([hidden]) ~ :not([hidden])': innerStyles
-  };
-};
-
-var divide = (function (properties) {
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var getConfigValue = properties.getConfigValue;
-  var getCoercedColor = properties.getCoercedColor;
-  var theme = properties.theme;
-  var match = properties.match;
-  var coercedColor = getCoercedColor(['divideColor', 'borderColor', 'colors']);
-  if (coercedColor) { return coercedColor; }
-  var opacityMatch = match(/(?<=(divide)-(opacity))([^]*)/) || match(/^divide-opacity$/) && 'default';
-
-  if (opacityMatch) {
-    var opacityValue = stripNegative(opacityMatch) || '';
-    var opacityProperties = Object.assign({}, {configValue: function (config) { return getConfigValue(theme(config), opacityValue); }},
-      properties);
-    var opacity = handleOpacity(opacityProperties);
-    if (opacity) { return opacity; }
-    errorSuggestions({
-      config: theme('divideOpacity') ? 'divideOpacity' : 'opacity'
-    });
-  }
-
-  var widthMatch = match(/(?<=(divide)-(x|y))([^]*)/) || match(/^divide-(x|y)$/) && 'DEFAULT';
-
-  if (widthMatch) {
-    var widthValue = stripNegative(widthMatch) || '';
-    var widthProperties = Object.assign({}, {configValue: function (config) { return getConfigValue(theme(config), widthValue); }},
-      properties);
-    var width = handleWidth$1(widthProperties);
-    if (width) { return width; }
-    errorSuggestions({
-      config: 'divideWidth'
-    });
-  }
-
-  errorSuggestions();
-});
-
-var dropShadow = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var classValue = match(/(?<=(drop-shadow)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('dropShadow');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['dropShadow']
-    });
-  }
-
-  var dropShadowValue = Array.isArray(value) ? value.map(function (v) { return ("drop-shadow(" + v + ")"); }).join(' ') : ("drop-shadow(" + value + ")");
-  return {
-    '--tw-drop-shadow': dropShadowValue,
-    filter: 'var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)'
-  };
-});
-
-var fill = (function (properties) {
-  var coercedColor = properties.getCoercedColor('fill');
-  if (!coercedColor) { properties.errors.errorSuggestions({
-    config: 'fill'
-  }); }
-  return coercedColor;
-});
-
-var gradient = (function (properties) {
-  var pieces = properties.pieces;
-  var matchConfigValue = properties.matchConfigValue;
-  var properties_pieces = properties.pieces;
-  var hasNegative = properties_pieces.hasNegative;
-  var hasImportant = properties_pieces.hasImportant;
-  var className = properties_pieces.className;
-  var properties_errors = properties.errors;
-  var errorNoNegatives = properties_errors.errorNoNegatives;
-  var errorNoImportant = properties_errors.errorNoImportant;
-  var errorSuggestions = properties_errors.errorSuggestions;
-  var value = matchConfigValue('gradientColorStops', /(?<=(from-|via-|to-))([^]*)/);
-  var slashAlphaValue = matchConfigValue('gradientColorStops', /(?<=(from-|via-|to-))([^]*)([^]*)(?=\/)/);
-  var styleDefinitions = value && {
-    from: {
-      '--tw-gradient-from': withAlpha({
-        pieces: pieces,
-        color: value
-      }) || value,
-      '--tw-gradient-stops': ['var(--tw-gradient-from)', ("var(--tw-gradient-to, " + (withAlpha({
-        color: value,
-        pieces: Object.assign({}, pieces,
-          {hasAlpha: true,
-          alpha: '0'}),
-        fallBackColor: 'rgb(255 255 255 / 0)'
-      })) + ")")].join(', ')
-    },
-    via: {
-      '--tw-gradient-stops': ['var(--tw-gradient-from)', withAlpha({
-        pieces: pieces,
-        color: value
-      }) || value, ("var(--tw-gradient-to, " + (withAlpha({
-        color: value,
-        pieces: Object.assign({}, pieces,
-          {hasAlpha: true,
-          alpha: '0'}),
-        fallBackColor: 'rgb(255 255 255 / 0)'
-      })) + ")")].join(', ')
-    },
-    to: {
-      '--tw-gradient-to': withAlpha({
-        pieces: pieces,
-        color: value
-      }) || value
-    }
-  } || slashAlphaValue && {
-    from: Object.assign({}, withAlpha({
-        pieces: pieces,
-        color: slashAlphaValue,
-        property: '--tw-gradient-from'
-      }),
-      {'--tw-gradient-stops': ['var(--tw-gradient-from)', 'var(--tw-gradient-to', withAlpha({
-        color: slashAlphaValue,
-        pieces: Object.assign({}, pieces,
-          {hasAlpha: true,
-          alpha: '0'})
-      })].join(', ')}),
-    via: {
-      '--tw-gradient-stops': ['var(--tw-gradient-from)', withAlpha({
-        color: slashAlphaValue,
-        pieces: pieces
-      }), ("var(--tw-gradient-to, " + (withAlpha({
-        color: slashAlphaValue,
-        pieces: Object.assign({}, pieces,
-          {hasAlpha: true,
-          alpha: '0'})
-      })) + ")")].join(', ')
-    },
-    to: withAlpha({
-      color: slashAlphaValue,
-      property: '--tw-gradient-to',
-      pieces: pieces
-    })
-  };
-  !styleDefinitions && errorSuggestions({
-    config: 'gradientColorStops'
-  });
-  var ref = Object.entries(styleDefinitions).find(function (ref) {
-    var k = ref[0];
-
-    return className.startsWith((k + "-"));
-  }) || [];
-  var styles = ref[1];
-  !styles && errorSuggestions({
-    config: 'gradientColorStops'
-  });
-  hasNegative && errorNoNegatives();
-  hasImportant && errorNoImportant();
-  return styles;
-});
-
-var grayscale = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(grayscale)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('grayscale');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['grayscale']
-    });
-  }
-
-  var grayscaleValue = Array.isArray(value) ? value.map(function (v) { return ("grayscale(" + v + ")"); }).join(' ') : ("grayscale(" + value + ")");
-  return {
-    '--tw-grayscale': grayscaleValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var hueRotate = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var properties_pieces = properties.pieces;
-  var negative = properties_pieces.negative;
-  var important = properties_pieces.important;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var classValue = match(/(?<=(hue-rotate)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('hueRotate');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['hueRotate']
-    });
-  }
-
-  var hueRotateValue = Array.isArray(value) ? value.map(function (v) { return ("hue-rotate(" + negative + v + ")"); }).join(' ') : ("hue-rotate(" + negative + value + ")");
-  return {
-    '--tw-hue-rotate': hueRotateValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var invert = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(invert)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('invert');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['invert']
-    });
-  }
-
-  var invertValue = Array.isArray(value) ? value.map(function (v) { return ("invert(" + v + ")"); }).join(' ') : ("invert(" + value + ")");
-  return {
-    '--tw-invert': invertValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var outline = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(outline)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('outline');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['outline']
-    });
-  }
-
-  var ref = Array.isArray(value) ? value : [value];
-  var outline = ref[0];
-  var outlineOffset = ref[1]; if ( outlineOffset === void 0 ) outlineOffset = 0;
-  return Object.assign({}, {outline: ("" + outline + important)},
-    (outlineOffset && {
-      outlineOffset: ("" + outlineOffset + important)
-    }));
-});
-
-var handleOpacity$1 = function (ref) {
-  var configValue = ref.configValue;
-
-  var value = configValue('placeholderOpacity') || configValue('opacity');
-  if (!value) { return; }
-  return {
-    '::placeholder': {
-      '--tw-placeholder-opacity': ("" + value)
-    }
-  };
-};
-
-var placeholder = (function (properties) {
-  var match = properties.match;
-  var theme = properties.theme;
-  var getConfigValue = properties.getConfigValue;
-  var getCoercedColor = properties.getCoercedColor;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var opacityMatch = match(/(?<=(placeholder-opacity-))([^]*)/) || match(/^placeholder-opacity$/);
-  var opacity = handleOpacity$1({
-    configValue: function (config) { return getConfigValue(theme(config), opacityMatch); }
-  });
-  if (opacity) { return opacity; }
-  var coercedColor = getCoercedColor('placeholderColor');
-  if (coercedColor) { return coercedColor; }
-  errorSuggestions({
-    config: ['placeholderColor', theme('placeholderOpacity') ? 'placeholderOpacity' : 'opacity']
-  });
-});
-
-var ringOffset = (function (properties) {
-  var getCoercedColor = properties.getCoercedColor;
-  var matchConfigValue = properties.matchConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var negative = properties.pieces.negative;
-  var width = matchConfigValue('ringOffsetWidth', /(?<=(ring-offset)-)([^]*)/);
-  if (width) { return {
-    '--tw-ring-offset-width': ("" + negative + width)
-  }; }
-  var coercedColor = getCoercedColor('ringOffsetColor');
-  if (coercedColor) { return coercedColor; }
-  errorSuggestions({
-    config: ['ringOffsetWidth', 'ringOffsetColor']
-  });
-});
-
-var saturate = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(saturate)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('saturate');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['saturate']
-    });
-  }
-
-  var saturateValue = Array.isArray(value) ? value.map(function (v) { return ("saturate(" + v + ")"); }).join(' ') : ("saturate(" + value + ")");
-  return {
-    '--tw-saturate': saturateValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var sepia = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(sepia)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var value = configValue('sepia');
-
-  if (!value) {
-    errorSuggestions({
-      config: ['sepia']
-    });
-  }
-
-  var sepiaValue = Array.isArray(value) ? value.map(function (v) { return ("sepia(" + v + ")"); }).join(' ') : ("sepia(" + value + ")");
-  return {
-    '--tw-sepia': sepiaValue,
-    filter: ("var(--tw-filter)" + important)
-  };
-});
-
-var space = (function (ref) {
-  var obj;
-
-  var ref_pieces = ref.pieces;
-  var negative = ref_pieces.negative;
-  var important = ref_pieces.important;
-  var className = ref_pieces.className;
-  var errorSuggestions = ref.errors.errorSuggestions;
-  var theme = ref.theme;
-  var match = ref.match;
-  var classNameValue = match(/(?<=(space)-(x|y)-)([^]*)/) || match(/^space-x$/) || match(/^space-y$/);
-  var spaces = theme('space');
-  var configValue = spaces[classNameValue || 'default'];
-  !configValue && errorSuggestions({
-    config: ['space']
-  });
-  var value = "" + negative + (addPxTo0(configValue));
-  var isSpaceX = className.startsWith('space-x-'); // 🚀
-
-  var cssVariableKey = isSpaceX ? '--tw-space-x-reverse' : '--tw-space-y-reverse';
-  var marginFirst = "calc(" + value + " * var(" + cssVariableKey + "))" + important;
-  var marginSecond = "calc(" + value + " * calc(1 - var(" + cssVariableKey + ")))" + important;
-  var styleKey = isSpaceX ? {
-    marginRight: marginFirst,
-    marginLeft: marginSecond
-  } : {
-    marginTop: marginSecond,
-    marginBottom: marginFirst
-  };
-  var innerStyles = Object.assign(( obj = {}, obj[cssVariableKey] = 0, obj ),
-    styleKey);
-  return {
-    '> :not([hidden]) ~ :not([hidden])': innerStyles
-  };
-});
-
-var handleWidth$2 = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('strokeWidth');
-  if (!value) { return; }
-  return {
-    strokeWidth: ("" + value + important)
-  };
-};
-
-var handleCustom = function (ref) {
-  var classValue = ref.classValue;
-  var important = ref.important;
-
-  if (classValue !== 'non-scaling') { return; }
-  return {
-    vectorEffect: ("non-scaling-stroke" + important)
-  };
-};
-
-var stroke = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getCoercedColor = properties.getCoercedColor;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var coercedColor = getCoercedColor('stroke');
-  if (coercedColor) { return coercedColor; }
-  var classValue = match(/(?<=(stroke)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var width = handleWidth$2({
-    configValue: configValue,
-    important: important
-  });
-  if (width) { return width; }
-  var custom = handleCustom({
-    classValue: classValue,
-    important: important
-  });
-  if (custom) { return custom; }
-  errorSuggestions({
-    config: ['stroke', 'strokeWidth']
-  });
-});
-
-var transition = (function (properties) {
-  var theme = properties.theme;
-  var match = properties.match;
-  var getConfigValue = properties.getConfigValue;
-  var errorSuggestions = properties.errors.errorSuggestions;
-  var important = properties.pieces.important;
-  var classValue = match(/(?<=(transition)-)([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var transitionProperty = configValue('transitionProperty');
-  !transitionProperty && errorSuggestions({
-    config: 'transitionProperty'
-  });
-
-  if (transitionProperty === 'none') {
-    return {
-      transitionProperty: ("" + transitionProperty + important)
-    };
-  }
-
-  var defaultTimingFunction = theme('transitionTimingFunction.DEFAULT');
-  var defaultDuration = theme('transitionDuration.DEFAULT');
-  return Object.assign({}, {transitionProperty: ("" + transitionProperty + important)},
-    (defaultTimingFunction && {
-      transitionTimingFunction: ("" + defaultTimingFunction + important)
-    }),
-    (defaultDuration && {
-      transitionDuration: ("" + defaultDuration + important)
-    }));
-});
-
-var handleSize$1 = function (ref) {
-  var configValue = ref.configValue;
-  var important = ref.important;
-
-  var value = configValue('fontSize');
-  if (!value) { return; }
-  var ref$1 = Array.isArray(value) ? value : [value];
-  var fontSize = ref$1[0];
-  var options = ref$1[1];
-  var lineHeight = options instanceof Object ? options.lineHeight : options;
-  var letterSpacing = options && options.letterSpacing;
-  return Object.assign({}, {fontSize: ("" + fontSize + important)},
-    (lineHeight && {
-      lineHeight: ("" + lineHeight + important)
-    }),
-    (letterSpacing && {
-      letterSpacing: ("" + letterSpacing + important)
-    }));
-};
-
-var text = (function (properties) {
-  var match = properties.match;
-  var theme = properties.theme;
-  var getCoercedColor = properties.getCoercedColor;
-  var getConfigValue = properties.getConfigValue;
-  var properties_pieces = properties.pieces;
-  var important = properties_pieces.important;
-  var hasNegative = properties_pieces.hasNegative;
-  var properties_errors = properties.errors;
-  var errorSuggestions = properties_errors.errorSuggestions;
-  var errorNoNegatives = properties_errors.errorNoNegatives;
-  hasNegative && errorNoNegatives();
-  var coercedColor = getCoercedColor('textColor');
-  if (coercedColor) { return coercedColor; }
-  var classValue = match(/(?<=(text-))([^]*)/);
-
-  var configValue = function (config) { return getConfigValue(theme(config), classValue); };
-
-  var size = handleSize$1({
-    configValue: configValue,
-    important: important
-  });
-  if (size) { return size; }
-  errorSuggestions({
-    config: ['textColor', 'fontSize']
-  });
-});
-
-
-
-var plugins = ({
-  accentColor: accentColor,
-  animation: animation,
-  backdropBlur: backdropBlur,
-  backdropBrightness: backdropBrightness,
-  backdropContrast: backdropContrast,
-  backdropGrayscale: backdropGrayscale,
-  backdropHueRotate: backdropHueRotate,
-  backdropInvert: backdropInvert,
-  backdropOpacity: backdropOpacity,
-  backdropSaturate: backdropSaturate,
-  backdropSepia: backdropSepia,
-  bg: bg,
-  blur: blur,
-  border: border,
-  boxShadow: boxShadow,
-  brightness: brightness,
-  caretColor: caretColor,
-  contrast: contrast,
-  container: container,
-  divide: divide,
-  dropShadow: dropShadow,
-  fill: fill,
-  gradient: gradient,
-  grayscale: grayscale,
-  hueRotate: hueRotate,
-  invert: invert,
-  outline: outline,
-  placeholder: placeholder,
-  ring: ring,
-  ringOffset: ringOffset,
-  saturate: saturate,
-  sepia: sepia,
-  space: space,
-  stroke: stroke,
-  transition: transition,
-  text: text
-});
-
-var alpha = function (ref) {
-  var pieces = ref.pieces;
-  var property = ref.property;
-  var variable = ref.variable;
-
-  return function (color$$1, alpha, fallBackColor) {
-  var newPieces = alpha ? Object.assign({}, pieces,
-    {alpha: alpha,
-    hasAlpha: true}) : pieces;
-  return withAlpha({
-    color: color$$1,
-    property: property,
-    variable: variable,
-    pieces: newPieces,
-    fallBackColor: fallBackColor
-  });
-};
-};
-
-var coercedTypeMap = {
-  any: function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    var property = config.property;
-    var wrapWith = config.wrapWith;
-    var result = {};
-    result[property] = value;
-    if (wrapWith) { return ( obj = {}, obj[wrapWith] = result, obj ); }
-    return result;
-  },
-  color: function (ref) {
-    var config = ref.config;
-    var value = ref.value;
-    var pieces = ref.pieces;
-    var forceReturn = ref.forceReturn;
-
-    var property = config.property;
-    var variable = config.variable;
-    var wrapWith = config.wrapWith;
-    if (typeof config === 'function') { return config(value, {
-      withAlpha: alpha({
-        pieces: pieces,
-        property: property,
-        variable: variable
-      })
-    }); }
-    if (!property) { return; }
-    var properties = Array.isArray(property) ? property : [property];
-    var result = properties.map(function (p) {
-      var obj;
-
-      var colorOutput;
-      if (typeof value === 'string' && value.startsWith('var(')) { colorOutput = {};
-        colorOutput[p] = ("" + value + (pieces.important)); }
-      colorOutput = colorOutput || withAlpha(Object.assign({}, {color: value,
-        property: p,
-        pieces: pieces},
-        (variable && {
-          variable: variable
-        })));
-      return wrapWith && colorOutput ? ( obj = {}, obj[wrapWith] = colorOutput, obj ) : colorOutput;
-    }).filter(Boolean);
-
-    if (result.length === 0) {
-      if (!forceReturn) { return; }
-      result = properties.map(function (p) {
-        var obj;
-
-        var output = {};
-        output[p] = ("" + value + (pieces.important));
-        return wrapWith && output ? ( obj = {}, obj[wrapWith] = output, obj ) : output;
-      });
-    }
-
-    return deepMerge.apply(void 0, result);
-  },
-  'line-width': function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    var theme = ref.theme;
-    if (typeof config === 'function') { return config(value, theme); }
-    if (!dataTypes.lineWidth) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  length: function (ref) {
-    var obj, obj$1;
-
-    var config = ref.config;
-    var value = ref.value;
-    var theme = ref.theme;
-    if (typeof config === 'function') { return config(value, theme); }
-    if (!dataTypes.length(value) && !value.startsWith('var(')) { return; }
-    var property = config.property;
-    var variable = config.variable;
-    var wrapWith = config.wrapWith;
-    if (!property) { return; }
-    var properties = Array.isArray(property) ? property : [property];
-    var result = Object.fromEntries(properties.map(function (p) { return [p, variable ? ("calc(" + value + " * var(" + variable + "))") : value]; }));
-    var resultWithVariable = Object.assign({}, (variable && ( obj = {}, obj[variable] = '0', obj )),
-      result);
-    if (wrapWith) { return ( obj$1 = {}, obj$1[wrapWith] = resultWithVariable, obj$1 ); }
-    return resultWithVariable;
-  },
-  number: function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    if (!dataTypes.number(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  'absolute-size': function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    if (!dataTypes.absoluteSize(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  'relative-size': function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    if (!dataTypes.relativeSize(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  percentage: function (ref) {
-    var obj;
-
-    var config = ref.config;
-    var value = ref.value;
-    if (!dataTypes.percentage(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  image: function (ref) {
-    var obj;
-
-    var value = ref.value;
-    var config = ref.config;
-    if (!dataTypes.image(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  url: function (ref) {
-    var obj;
-
-    var value = ref.value;
-    var config = ref.config;
-    if (!dataTypes.url(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  position: function (ref) {
-    var obj;
-
-    var value = ref.value;
-    var config = ref.config;
-    if (!dataTypes.position(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  shadow: function (ref) {
-    var value = ref.value;
-    var pieces = ref.pieces;
-
-    if (!dataTypes.shadow(value)) { return; }
-    return makeBoxShadow(value, pieces.important);
-  },
-  lookup: function (ref) {
-    var config = ref.config;
-    var value = ref.value;
-    var theme = ref.theme;
-
-    return typeof config === 'function' && config(value, theme);
-},
-  'generic-name': function (ref) {
-    var obj;
-
-    var value = ref.value;
-    var config = ref.config;
-    if (!dataTypes.genericName(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  },
-  'family-name': function (ref) {
-    var obj;
-
-    var value = ref.value;
-    var config = ref.config;
-    if (!dataTypes.familyName(value)) { return; }
-    return ( obj = {}, obj[config.property] = value, obj );
-  }
-};
-
-var getCoercedValue = function (customValue, context) {
-  var obj;
-
-  var ref = splitOnFirst(customValue, ':');
-  var explicitType = ref[0];
-  var value = ref[1];
-  if (value.length === 0) { return; }
-  var coercedConfig = context.coercedConfig;
-  var coercedOptions = Object.keys(coercedConfig || {});
-  throwIf(!coercedOptions.includes(explicitType), function () { return logBadGood(("`" + (context.property) + "-[" + explicitType + ":" + value + "]` < The coerced value of “" + explicitType + "” isn’t available"), coercedOptions.length > 0 ? ("Try one of these coerced classes:\n\n" + (coercedOptions.map(function (o) {
-    var config = coercedConfig[o];
-    var propertyUsed = config ? config.property : '';
-    return ("`" + (context.property) + "-[" + o + ":" + value + "]`" + (propertyUsed ? (" to use `" + propertyUsed + "`") : ''));
-  }).join('\n'))) : ("`" + (context.property) + "-[" + value + "]` < Add " + (context.property) + " without a coerced value")); });
-  var result = coercedTypeMap[explicitType]({
-    config: coercedConfig[explicitType],
-    value: value,
-    pieces: context.pieces,
-    theme: getTheme(context.state.config.theme)
-  }); // Return coerced values even when they aren't validated
-
-  if (!result) {
-    var ref$1 = coercedConfig[explicitType];
-    var property = ref$1.property;
-    return ( obj = {}, obj[property] = value, obj );
-  }
-
-  return result;
-};
-
-var getCoercedColor = function (ref) {
-  var pieces = ref.pieces;
-  var theme = ref.theme;
-  var config = ref.config;
-  var matchConfig = ref.matchConfig;
-
-  return function (configKey) {
-  if (!config) { return; } // Match config including a custom slash alpha, eg: bg-black/[.5]
-
-  var keys = Array.isArray(configKey) ? configKey : [configKey];
-  var value;
-  keys.find(function (k) {
-    var match = matchConfig(k.config || k.property || k);
-    if (match) { value = match; }
-    return match;
-  });
-  if (!value) { return; }
-  return coercedTypeMap.color({
-    value: value,
-    config: config,
-    pieces: pieces,
-    theme: theme,
-    forceReturn: true
-  });
-};
-};
-
-var getCoercedLength = function (ref) {
-  var pieces = ref.pieces;
-  var theme = ref.theme;
-  var config = ref.config;
-  var matchConfig = ref.matchConfig;
-
-  return function (configKey) {
-  var value = matchConfig(configKey.config || configKey.property || configKey);
-  if (!value) { return; }
-  throwIf(pieces.hasAlpha, function () { return opacityErrorNotFound({
-    className: pieces.classNameRaw
-  }); });
-  return coercedTypeMap.length({
-    value: value,
-    config: config,
-    pieces: pieces,
-    theme: theme
-  });
-};
-};
-
-function objectWithoutProperties$2 (obj, exclude) { var target = {}; for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k) && exclude.indexOf(k) === -1) target[k] = obj[k]; return target; }
-
-var getErrors = function (ref) {
-  var pieces = ref.pieces;
-  var state = ref.state;
-  var dynamicKey = ref.dynamicKey;
-
-  var className = pieces.className;
-  var variants = pieces.variants;
-  return {
-    errorSuggestions: function (options) {
-      throw new babelPluginMacros.MacroError(errorSuggestions(Object.assign({}, {pieces: pieces,
-        state: state,
-        dynamicKey: dynamicKey},
-        options)));
-    },
-    errorNoVariants: function () {
-      throw new babelPluginMacros.MacroError(logNotAllowed({
-        className: className,
-        error: ("doesn’t support " + (variants.map(function (variant) { return (variant + ":"); }).join('')) + " or any other variants")
-      }));
-    },
-    errorNoImportant: function () {
-      throw new babelPluginMacros.MacroError(logNotAllowed({
-        className: className,
-        error: "doesn’t support !important"
-      }));
-    },
-    errorNoNegatives: function () {
-      throw new babelPluginMacros.MacroError(logNotAllowed({
-        className: className,
-        error: "doesn’t support negatives"
-      }));
-    }
-  };
-};
-
-var callPlugin = function (corePlugin, context) {
-  var handle = plugins[corePlugin] || null;
-
-  if (!handle) {
-    throw new babelPluginMacros.MacroError(("No handler specified, looked for \"" + corePlugin + "\""));
-  }
-
-  return handle(context);
-}; // TODO: Deprecate
-
-
-var getMatchConfigValue = function (ref) {
-  var match = ref.match;
-  var theme = ref.theme;
-  var getConfigValue$$1 = ref.getConfigValue;
-
-  return function (config, regexMatch) {
-  var matcher = match(regexMatch);
-  if (matcher === undefined) { return; }
-  return getConfigValue$$1(theme(config), matcher);
-};
-}; // Direct match
-
-
-var getMatchConfig = function (ref) {
-  var match = ref.match;
-  var theme = ref.theme;
-  var getConfigValue$$1 = ref.getConfigValue;
-  var dynamicKey = ref.dynamicKey;
-
-  return function (config) {
-  var directMatch = match(("(?<=" + dynamicKey + "(-|$))(.)*"));
-  if (directMatch === undefined) { return; }
-  return getConfigValue$$1(theme(config), directMatch);
-};
-};
-
-var handleCorePlugins = (function (ref) {
-  var corePlugin = ref.corePlugin;
-  var pieces = ref.pieces;
-  var state = ref.state;
-  var dynamicKey = ref.dynamicKey;
-  var theme = ref.theme;
-  var configTwin = ref.configTwin;
-  var dynamicConfig = ref.dynamicConfig;
-  var rest$1 = objectWithoutProperties$2( ref, ["corePlugin", "classNameRaw", "pieces", "state", "dynamicKey", "theme", "configTwin", "dynamicConfig"] );
-  var rest = rest$1;
-
-  var errors = getErrors({
-    state: state,
-    pieces: pieces,
-    dynamicKey: dynamicKey
-  });
-
-  var match = function (regex) {
-    var result = get(pieces.classNameNoSlashAlpha.match(regex), [0]);
-    if (result === undefined) { return; }
-    return result;
-  };
-
-  var matchConfigValue = getMatchConfigValue({
-    match: match,
-    theme: theme,
-    getConfigValue: getConfigValue
-  });
-  var matchConfig = getMatchConfig({
-    match: match,
-    theme: theme,
-    getConfigValue: getConfigValue,
-    dynamicKey: dynamicKey
-  });
-  var toColor = getColor({
-    theme: theme,
-    getConfigValue: getConfigValue,
-    matchConfigValue: matchConfigValue,
-    pieces: pieces
-  });
-  var coercedConfig = dynamicConfig.coerced || {};
-  var context = Object.assign({}, {state: function () { return state; },
-    errors: errors,
-    pieces: pieces,
-    match: match,
-    theme: theme,
-    toColor: toColor,
-    configTwin: configTwin,
-    getConfigValue: getConfigValue,
-    matchConfigValue: matchConfigValue,
-    // TODO: Deprecate
-    matchConfig: matchConfig,
-    dynamicKey: dynamicKey,
-    dynamicConfig: dynamicConfig,
-    getCoercedColor: getCoercedColor({
-      config: coercedConfig.color,
-      pieces: pieces,
-      theme: theme,
-      matchConfig: matchConfig
-    }),
-    getCoercedLength: getCoercedLength({
-      config: coercedConfig.length,
-      pieces: pieces,
-      theme: theme,
-      matchConfig: matchConfig
-    })},
-    rest);
-  return callPlugin(corePlugin, context);
-});
-
-var handleCss = (function (ref) {
-  var obj;
-
-  var className = ref.className;
-  var ref$1 = splitOnFirst(className // Replace the "stand-in spaces" with real ones
-  .replace(new RegExp(SPACE_ID, 'g'), ' '), '[');
-  var property = ref$1[0];
-  var value = ref$1[1];
-  property = property.startsWith('--') && property || // Retain css variables
-  camelize(property); // Remove the last ']' and whitespace
-
-  value = value.slice(0, -1).trim();
-  throwIf(!property, function () { return logBadGood(("“[" + value + "]” is missing the css property before the square brackets"), ("Write it like this: marginTop[" + (value || '5rem') + "]")); });
-  return ( obj = {}, obj[property] = value, obj );
-});
-
-var searchDynamicConfigByProperty = function (propertyName) {
-  var found = Object.entries(dynamicStyles).find(function (ref) {
-    var k = ref[0];
-
-    return propertyName === k;
-  });
-  if (!found) { return; }
-  var result = found[1];
-
-  if (result.length > 1) {
-    return {
-      value: result.map(function (r) { return r.value; }).flat(),
-      coerced: Object.assign.apply(Object, [ {} ].concat( result.map(function (r) { return r.coerced; }) ))
-    };
-  }
-
-  return result;
-};
-
-var showSuggestions = function (property, value) {
-  var suggestions = getSuggestions$1(property, value);
-  throwIf(true, function () { return logBadGood(("The arbitrary class “" + property + "” in “" + property + "-[" + value + "]” wasn’t found"), suggestions.length > 0 && ("Try one of these:\n\n" + (suggestions.join(', ')))); });
-};
-
-var getSuggestions$1 = function (property, value) {
-  var results = stringSimilarity.findBestMatch(property, Object.keys(dynamicStyles).filter(function (s) { return s.hasArbitrary !== 'false'; }));
-  var suggestions = results.ratings.filter(function (item) { return item.rating > 0.25; });
-  return suggestions.length > 0 ? suggestions.map(function (s) { return ((s.target) + "-[" + value + "]"); }) : [];
-};
-
-var getClassData = function (className) {
-  var ref = splitOnFirst(className // Replace the "stand-in spaces" with real ones
-  .replace(new RegExp(SPACE_ID, 'g'), ' '), '[');
-  var property = ref[0];
-  var value = ref[1];
-  return {
-    property: property.slice(0, -1),
-    // Remove the dash just before the brackets
-    value: value.slice(0, -1).replace(/_/g, ' ').trim() // Remove underscores, the last ']' and whitespace
-
-  };
-};
-
-var handleArbitraryCss = (function (ref) {
-  var obj;
-
-  var state = ref.state;
-  var pieces = ref.pieces;
-  var ref$1 = getClassData(pieces.classNameNoSlashAlpha);
-  var property = ref$1.property;
-  var value = ref$1.value;
-  var config = searchDynamicConfigByProperty(property) || {}; // Check for coerced value
-  // Values that have their type specified: [length:3px]/[color:red]/etc
-
-  var coercedConfig = Array.isArray(config) ? config.map(function (c) { return c.coerced; }) : config.coerced;
-  var coercedValue = getCoercedValue(value, {
-    property: property,
-    pieces: pieces,
-    state: state,
-    coercedConfig: coercedConfig
-  });
-  if (coercedValue) { return coercedValue; } // Theme values, eg: tw`text-[theme(colors.red.500)]`
-
-  var themeValue = value.match(/theme\('?([^']+)'?\)/);
-
-  if (themeValue) {
-    var val = getTheme(state.config.theme)(themeValue[1]);
-    if (val) { value = val; }
-  } // Deal with font array
-
-
-  if (Array.isArray(config)) {
-    var value$1 = config.find(function (c) { return c.value; });
-    value$1 && (config = value$1);
-  }
-  (isEmpty(config) || Array.isArray(config)) && showSuggestions(property, value);
-  throwIf(config.hasArbitrary === false, function () { return logBadGood(("There is no support for the arbitrary value “" + property + "” in “" + property + "-[" + value + "]”")); });
-
-  if (Array.isArray(config.value)) {
-    var arbitraryValue$1;
-    config.value.find(function (type) {
-      var result = coercedTypeMap[type]({
-        config: config.coerced[type],
-        value: value,
-        pieces: pieces,
-        theme: getTheme(state.config.theme)
-      });
-      if (result) { arbitraryValue$1 = result; }
-      return Boolean(result);
-    });
-    throwIf(!arbitraryValue$1, function () { return logBadGood(("The arbitrary value in “" + property + "-[" + value + "]” isn’t valid"), ("Replace “" + value + "” with a valid " + (config.value.join(' or ')) + " based value")); });
-    return arbitraryValue$1;
-  }
-
-  if (pieces.hasAlpha) {
-    throwIf(!config.coerced || !config.coerced.color, function () { return logBadGood(("There is no support for a “" + property + "” alpha value in “" + property + "-[" + value + "]”")); });
-    return coercedTypeMap.color({
-      config: config.coerced.color,
-      value: value,
-      pieces: pieces,
-      theme: getTheme(state.config.theme)
-    });
-  }
-
-  var arbitraryProperty = config.prop;
-
-  var color$$1 = function (props) { return withAlpha(Object.assign({}, {color: value,
-    pieces: pieces},
-    props)); };
-
-  var arbitraryValue = typeof config.value === 'function' ? config.value({
-    value: value,
-    color: color$$1,
-    negative: pieces.negative,
-    isEmotion: state.isEmotion
-  }) : maybeAddNegative(value, pieces.negative); // Raw values - no prop value found in config
-
-  if (!arbitraryProperty) { return arbitraryValue || showSuggestions(property, value); }
-  if (Array.isArray(arbitraryProperty)) { return arbitraryProperty.reduce(function (result, p) {
-    var obj;
-
-    return (Object.assign({}, result,
-    ( obj = {}, obj[p] = arbitraryValue, obj )));
-    }, {}); }
-  return ( obj = {}, obj[arbitraryProperty] = arbitraryValue, obj );
-});
-
-function objectWithoutProperties$3 (obj, exclude) { var target = {}; for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k) && exclude.indexOf(k) === -1) target[k] = obj[k]; return target; }
+}; // When removing a multiline comment, determine if a space is left or not
 // eg: You'd want a space left in this situation: tw`class1/* comment */class2`
 
-var multilineReplaceWith = function (match, index, input) {
-  var charBefore = input[index - 1];
-  var directPrefixMatch = charBefore && charBefore.match(/\w/);
-  var charAfter = input[Number(index) + Number(match.length)];
-  var directSuffixMatch = charAfter && charAfter.match(/\w/);
+
+const multilineReplaceWith = (match, index, input) => {
+  const charBefore = input[index - 1];
+  const directPrefixMatch = charBefore && charBefore.match(/\w/);
+  const charAfter = input[Number(index) + Number(match.length)];
+  const directSuffixMatch = charAfter && charAfter.match(/\w/);
   return directPrefixMatch && directPrefixMatch[0] && directSuffixMatch && directSuffixMatch[0] ? ' ' : '';
 };
 
-var formatTasks$2 = [// Strip pipe dividers " | "
-function (ref) {
-  var classes = ref.classes;
+const formatTasks = [// Strip pipe dividers " | "
+classes => classes.replace(/ \| /g, ' '), // Strip multiline comments
+classes => classes.replace(/(?<!\/)\/(?!\/)\*[\S\s]*?\*\//g, multilineReplaceWith), // Strip singleline comments
+classes => classes.replace(/\/\/.*/g, ''), // Unwrap grouped variants
+handleVariantGroups, // Move some properties to the front of the list so they work as expected
+...Object.values(ordering), // Add a missing content class for after:/before: variants
+addContentClass];
+var getStyleData = ((classes, args) => {
+  const {
+    isCsOnly = false,
+    silentMismatches = false,
+    t,
+    state
+  } = args;
+  const hasEmptyClasses = [null, 'null', undefined].includes(classes);
+  if (silentMismatches && hasEmptyClasses) return;
+  throwIf(hasEmptyClasses, () => logGeneralError('Only plain strings can be used with "tw".\nRead more at https://twinredirect.page.link/template-literals'));
 
-  return classes.replace(/ \| /g, ' ');
-}, // Strip multiline comments
-function (ref) {
-  var classes = ref.classes;
-
-  return classes.replace(/(?<!\/)\/(?!\/)\*[\S\s]*?\*\//g, multilineReplaceWith);
-}, // Strip singleline comments
-function (ref) {
-  var classes = ref.classes;
-
-  return classes.replace(/\/\/.*/g, '');
-}, // Unwrap grouped variants
-function (ref) {
-  var classes = ref.classes;
-
-  return handleVariantGroups(classes);
-}, // Move some properties to the front of the list so they work as expected
-function (ref) {
-  var classes = ref.classes;
-
-  return orderGridProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderTransitionProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderTransformProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderRingProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderBackdropProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderFilterProperty(classes);
-}, function (ref) {
-  var classes = ref.classes;
-
-  return orderBgOpacityProperty(classes);
-}, // Move and sort the responsive items to the end of the list
-function (ref) {
-  var classes = ref.classes;
-  var state = ref.state;
-
-  return orderByScreens(classes, state);
-}, // Add a missing content class for after:/before: variants
-function (ref) {
-  var classes = ref.classes;
-  var state = ref.state;
-
-  return addContentClass(classes, state);
-}];
-var getStyleData = (function (classes, ref) {
-  if ( ref === void 0 ) ref = {};
-  var isCsOnly = ref.isCsOnly; if ( isCsOnly === void 0 ) isCsOnly = false;
-  var silentMismatches = ref.silentMismatches; if ( silentMismatches === void 0 ) silentMismatches = false;
-  var t = ref.t;
-  var state = ref.state;
-
-  var hasEmptyClasses = [null, 'null', undefined].includes(classes);
-  if (silentMismatches && hasEmptyClasses) { return; }
-  throwIf(hasEmptyClasses, function () { return logGeneralError('Only plain strings can be used with "tw".\nRead more at https://twinredirect.page.link/template-literals'); });
-
-  for (var i = 0, list = formatTasks$2; i < list.length; i += 1) {
-    var task = list[i];
-
-    classes = task({
-      classes: classes,
-      state: state
-    });
+  for (const task of formatTasks) {
+    classes = task(classes, state);
   }
 
-  var theme = getTheme(state.config.theme);
-  var classesMatched = [];
-  var classesMismatched = []; // Merge styles into a single css object
+  const theme = getTheme(state.config.theme);
+  const classesMatched = [];
+  const classesMismatched = []; // Merge styles into a single css object
 
-  var styles = classes.reduce(function (results, classNameRaw) {
-    var pieces = getPieces({
-      classNameRaw: classNameRaw,
-      state: state
+  const styles = classes.reduce((results, classNameRaw) => {
+    const pieces = getPieces({
+      classNameRaw,
+      state
     });
-    var hasPrefix = pieces.hasPrefix;
-    var className = pieces.className;
-    var hasVariants = pieces.hasVariants; // Avoid prechecks on silent mode as they'll error loudly
+    const {
+      hasPrefix,
+      className,
+      hasVariants
+    } = pieces; // Avoid prechecks on silent mode as they'll error loudly
 
     if (!silentMismatches) {
-      var doPrechecks$$1 = doPrechecks;
-      var rest = objectWithoutProperties$3( precheckExports, ["default"] );
-      var prechecks = rest;
-      var precheckContext = {
-        pieces: pieces,
-        classNameRaw: classNameRaw,
-        state: state
+      const {
+        default: doPrechecks
+      } = precheckExports,
+            prechecks = _objectWithoutPropertiesLoose(precheckExports, _excluded);
+
+      const precheckContext = {
+        pieces,
+        classNameRaw,
+        state
       };
-      doPrechecks$$1(Object.values(prechecks), precheckContext);
+      doPrechecks(Object.values(prechecks), precheckContext);
     } // Make sure non-prefixed classNames are ignored
 
 
-    var ref = state.config;
-    var prefix = ref.prefix;
-    var hasPrefixMismatch = prefix && !hasPrefix && className;
+    const {
+      prefix
+    } = state.config;
+    const hasPrefixMismatch = prefix && !hasPrefix && className;
 
     if (silentMismatches && (!className || hasPrefixMismatch)) {
       classesMismatched.push(classNameRaw);
       return results;
     }
 
-    throwIf(!className, function () { return hasVariants ? logNotFoundVariant({
-      classNameRaw: classNameRaw
-    }) : logNotFoundClass; });
-    var ref$1 = getProperties(className, state, {
-      isCsOnly: isCsOnly
+    throwIf(!className, () => hasVariants ? logNotFoundVariant({
+      classNameRaw
+    }) : logNotFoundClass);
+    const {
+      hasMatches,
+      hasUserPlugins,
+      corePluginName,
+      coreConfig,
+      type
+    } = getProperties(className, state, {
+      isCsOnly
     });
-    var hasMatches = ref$1.hasMatches;
-    var hasUserPlugins = ref$1.hasUserPlugins;
-    var dynamicKey = ref$1.dynamicKey;
-    var dynamicConfig = ref$1.dynamicConfig;
-    var corePlugin = ref$1.corePlugin;
-    var type = ref$1.type;
 
     if (silentMismatches && !hasMatches && !hasUserPlugins) {
       classesMismatched.push(classNameRaw);
@@ -8332,40 +6928,37 @@ var getStyleData = (function (classes, ref) {
     } // Error if short css is used and disabled
 
 
-    var isShortCssDisabled = state.configTwin.disableShortCss && type === 'css' && !isCsOnly;
-    throwIf(isShortCssDisabled, function () { return logBadGood(("Short css has been disabled in the config so “" + classNameRaw + "” won’t work" + (!state.configTwin.disableCsProp ? ' outside the cs prop' : '') + "."), !state.configTwin.disableCsProp ? ("Add short css with the cs prop: &lt;div cs=\"" + classNameRaw + "\" /&gt;") : ''); }); // Kick off suggestions when no class matches
+    const isShortCssDisabled = state.configTwin.disableShortCss && type === 'shortCss' && !isCsOnly;
+    throwIf(isShortCssDisabled, () => logBadGood(`Short css has been disabled in the config so “${classNameRaw}” won’t work${!state.configTwin.disableCsProp ? ' outside the cs prop' : ''}.`, !state.configTwin.disableCsProp ? `Add short css with the cs prop: &lt;div cs="${classNameRaw}" /&gt;` : '')); // Kick off suggestions when no class matches
 
-    throwIf(!hasMatches && !hasUserPlugins, function () { return errorSuggestions({
-      pieces: pieces,
-      state: state,
-      isCsOnly: isCsOnly
-    }); });
-    var styleContext = {
-      theme: theme,
-      pieces: pieces,
-      state: state,
-      corePlugin: corePlugin,
-      className: className,
-      classNameRaw: classNameRaw,
-      dynamicKey: dynamicKey,
-      dynamicConfig: dynamicConfig,
+    throwIf(!hasMatches && !hasUserPlugins, () => errorSuggestions({
+      pieces,
+      state,
+      isCsOnly
+    }));
+    const styleContext = {
+      theme,
+      pieces,
+      state,
+      className,
+      classNameRaw,
+      corePluginName,
+      coreConfig,
       configTwin: state.configTwin
     };
-    var styleHandler = {
-      static: function () { return handleStatic(styleContext); },
-      dynamic: function () { return handleDynamic(styleContext); },
-      css: function () { return handleCss(styleContext); },
-      arbitraryCss: function () { return handleArbitraryCss(styleContext); },
-      userPlugin: function () { return handleUserPlugins(styleContext); },
-      corePlugin: function () { return handleCorePlugins(styleContext); }
+    const styleHandler = {
+      shortCss: handleShortCss,
+      dynamic: handleDynamic,
+      arbitraryCss: handleArbitraryCss,
+      userPlugin: handleUserPlugins
     };
-    var style;
+    let style;
 
     if (hasUserPlugins) {
       style = applyTransforms({
-        type: type,
-        pieces: pieces,
-        style: styleHandler.userPlugin()
+        type,
+        pieces,
+        style: styleHandler.userPlugin(styleContext)
       });
     } // Check again there are no userPlugin matches
 
@@ -8375,64 +6968,65 @@ var getStyleData = (function (classes, ref) {
       return results;
     }
 
-    throwIf(!hasMatches && !style, function () { return errorSuggestions({
-      pieces: pieces,
-      state: state,
-      isCsOnly: isCsOnly
-    }); });
+    throwIf(!hasMatches && !style, () => errorSuggestions({
+      pieces,
+      state,
+      isCsOnly
+    }));
     style = style || applyTransforms({
-      type: type,
-      pieces: pieces,
-      style: styleHandler[type]()
+      pieces,
+      style: styleHandler[type](styleContext)
     });
-    var result = deepMerge(results, addVariants({
-      results: results,
-      style: style,
-      pieces: pieces,
-      state: state
+    const result = deepMerge__default["default"](results, addVariants({
+      results,
+      style,
+      pieces,
+      state
     }));
     state.debug(debugSuccess(classNameRaw, style));
     classesMatched.push(classNameRaw);
     return result;
   }, {});
   return {
-    // TODO: Avoid astifying here, move it outside function
-    styles: astify(isEmpty(styles) ? {} : styles, t),
+    astStyles: astify(isEmpty$1(styles) ? {} : styles, t),
     mismatched: classesMismatched.join(' '),
     matched: classesMatched.join(' ')
   };
 });
 
-var moveTwPropToStyled = function (props) {
-  var jsxPath = props.jsxPath;
-  var styles = props.styles;
-  makeStyledComponent(Object.assign({}, props,
-    {secondArg: styles})); // Remove the tw attribute
+const moveTwPropToStyled = props => {
+  const {
+    jsxPath,
+    astStyles
+  } = props;
+  makeStyledComponent(_extends({}, props, {
+    secondArg: astStyles
+  })); // Remove the tw attribute
 
-  var tagAttributes = jsxPath.node.attributes;
-  var twAttributeIndex = tagAttributes.findIndex(function (n) { return n.name && n.name.name === 'tw'; });
-  if (twAttributeIndex < 0) { return; }
+  const tagAttributes = jsxPath.node.attributes;
+  const twAttributeIndex = tagAttributes.findIndex(n => n.name && n.name.name === 'tw');
+  if (twAttributeIndex < 0) return;
   jsxPath.node.attributes.splice(twAttributeIndex, 1);
 };
 
-var mergeIntoCssAttribute = function (ref) {
-  var path$$1 = ref.path;
-  var styles = ref.styles;
-  var cssAttribute = ref.cssAttribute;
-  var t = ref.t;
+const mergeIntoCssAttribute = ({
+  path,
+  astStyles,
+  cssAttribute,
+  t
+}) => {
+  if (!cssAttribute) return; // The expression is the value as a NodePath
 
-  if (!cssAttribute) { return; } // The expression is the value as a NodePath
+  const attributeValuePath = cssAttribute.get('value'); // If it's not {} or "", get out of here
 
-  var attributeValuePath = cssAttribute.get('value'); // If it's not {} or "", get out of here
-
-  if (!attributeValuePath.isJSXExpressionContainer() && !attributeValuePath.isStringLiteral()) { return; }
-  var existingCssAttribute = attributeValuePath.isStringLiteral() ? attributeValuePath : attributeValuePath.get('expression');
-  var attributeNames = getAttributeNames(path$$1);
-  var isBeforeCssAttribute = attributeNames.indexOf('tw') - attributeNames.indexOf('css') < 0;
+  if (!attributeValuePath.isJSXExpressionContainer() && !attributeValuePath.isStringLiteral()) return;
+  const existingCssAttribute = attributeValuePath.isStringLiteral() ? attributeValuePath : attributeValuePath.get('expression');
+  const attributeNames = getAttributeNames(path);
+  const isBeforeCssAttribute = attributeNames.indexOf('tw') - attributeNames.indexOf('css') < 0;
 
   if (existingCssAttribute.isArrayExpression()) {
     //  The existing css prop is an array, eg: css={[...]}
-    isBeforeCssAttribute ? existingCssAttribute.unshiftContainer('elements', styles) : existingCssAttribute.pushContainer('elements', styles);
+    isBeforeCssAttribute ? existingCssAttribute.unshiftContainer('elements', astStyles) : existingCssAttribute.pushContainer('elements', astStyles);
   } else {
     // css prop is either:
     // TemplateLiteral
@@ -8441,199 +7035,210 @@ var mergeIntoCssAttribute = function (ref) {
     // <div css={{ ... }} tw="..." />
     // or ArrowFunctionExpression/FunctionExpression
     // <div css={() => (...)} tw="..." />
-    var existingCssAttributeNode = existingCssAttribute.node; // The existing css prop is an array, eg: css={[...]}
+    const existingCssAttributeNode = existingCssAttribute.node; // The existing css prop is an array, eg: css={[...]}
 
-    var styleArray = isBeforeCssAttribute ? [styles, existingCssAttributeNode] : [existingCssAttributeNode, styles];
-    var arrayExpression = t.arrayExpression(styleArray);
-    var parent = existingCssAttribute.parent;
-    var replacement = parent.type === 'JSXAttribute' ? t.jsxExpressionContainer(arrayExpression) : arrayExpression;
+    const styleArray = isBeforeCssAttribute ? [astStyles, existingCssAttributeNode] : [existingCssAttributeNode, astStyles];
+    const arrayExpression = t.arrayExpression(styleArray);
+    const {
+      parent
+    } = existingCssAttribute;
+    const replacement = parent.type === 'JSXAttribute' ? t.jsxExpressionContainer(arrayExpression) : arrayExpression;
     existingCssAttribute.replaceWith(replacement);
   }
 };
 
-var handleTwProperty = function (ref) {
-  var path$$1 = ref.path;
-  var t = ref.t;
-  var program = ref.program;
-  var state = ref.state;
-
-  if (!path$$1.node || path$$1.node.name.name !== 'tw') { return; }
+const handleTwProperty = ({
+  path,
+  t,
+  program,
+  state
+}) => {
+  if (!path.node || path.node.name.name !== 'tw') return;
   state.hasTwAttribute = true;
-  var nodeValue = path$$1.node.value; // Allow tw={"class"}
+  const nodeValue = path.node.value; // Allow tw={"class"}
 
-  var expressionValue = nodeValue.expression && nodeValue.expression.type === 'StringLiteral' && nodeValue.expression.value; // Feedback for unsupported usage
+  const expressionValue = nodeValue.expression && nodeValue.expression.type === 'StringLiteral' && nodeValue.expression.value; // Feedback for unsupported usage
 
-  throwIf(nodeValue.expression && !expressionValue, function () { return logGeneralError("Only plain strings can be used with the \"tw\" prop.\nEg: <div tw=\"text-black\" /> or <div tw={\"text-black\"} />\nRead more at https://twinredirect.page.link/template-literals"); });
-  var rawClasses = expressionValue || nodeValue.value || '';
-  var ref$1 = getStyleData(rawClasses, {
-    t: t,
-    state: state
+  throwIf(nodeValue.expression && !expressionValue, () => logGeneralError(`Only plain strings can be used with the "tw" prop.\nEg: <div tw="text-black" /> or <div tw={"text-black"} />\nRead more at https://twinredirect.page.link/template-literals`));
+  const rawClasses = expressionValue || nodeValue.value || '';
+  const {
+    astStyles
+  } = getStyleData(rawClasses, {
+    t,
+    state
   });
-  var styles = ref$1.styles;
-  var jsxPath = getParentJSX(path$$1);
-  var attributes = jsxPath.get('attributes');
-  var ref$2 = getCssAttributeData(attributes);
-  var cssAttribute = ref$2.attribute;
+  const jsxPath = getParentJSX(path);
+  const attributes = jsxPath.get('attributes');
+  const {
+    attribute: cssAttribute
+  } = getCssAttributeData(attributes);
 
   if (state.configTwin.moveTwPropToStyled) {
     moveTwPropToStyled({
-      styles: styles,
-      jsxPath: jsxPath,
-      t: t,
-      program: program,
-      state: state
+      astStyles,
+      jsxPath,
+      t,
+      program,
+      state
     });
     addDataTwPropToPath({
-      t: t,
-      attributes: attributes,
-      rawClasses: rawClasses,
-      path: path$$1,
-      state: state
+      t,
+      attributes,
+      rawClasses,
+      path,
+      state
     });
     return;
   }
 
   if (!cssAttribute) {
     // Replace the tw prop with the css prop
-    path$$1.replaceWith(t.jsxAttribute(t.jsxIdentifier('css'), t.jsxExpressionContainer(styles)));
+    path.replaceWith(t.jsxAttribute(t.jsxIdentifier('css'), t.jsxExpressionContainer(astStyles)));
     addDataTwPropToPath({
-      t: t,
-      attributes: attributes,
-      rawClasses: rawClasses,
-      path: path$$1,
-      state: state
+      t,
+      attributes,
+      rawClasses,
+      path,
+      state
     });
     return;
   } // Merge tw styles into an existing css prop
 
 
   mergeIntoCssAttribute({
-    cssAttribute: cssAttribute,
+    cssAttribute,
     path: jsxPath,
-    styles: styles,
-    t: t
+    astStyles,
+    t
   });
-  path$$1.remove(); // remove the tw prop
+  path.remove(); // remove the tw prop
 
   addDataPropToExistingPath({
-    t: t,
-    attributes: attributes,
-    rawClasses: rawClasses,
+    t,
+    attributes,
+    rawClasses,
     path: jsxPath,
-    state: state
+    state
   });
 };
 
-var handleTwFunction = function (ref) {
-  var references = ref.references;
-  var state = ref.state;
-  var t = ref.t;
+const handleTwFunction = ({
+  references,
+  state,
+  t
+}) => {
+  const defaultImportReferences = references.default || references.tw || []; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
 
-  var defaultImportReferences = references.default || references.tw || [];
-  defaultImportReferences.forEach(function (path$$1) {
+  defaultImportReferences.forEach(path => {
     /**
      * Gotcha: After twin changes a className/tw/cs prop path then the reference
      * becomes stale and needs to be refreshed with crawl()
      */
-    var parentPath = path$$1.parentPath;
-    if (!parentPath.isTaggedTemplateExpression()) { path$$1.scope.crawl(); }
-    var parent = path$$1.findParent(function (x) { return x.isTaggedTemplateExpression(); });
-    if (!parent) { return; } // Check if the style attribute is being used
+    const {
+      parentPath
+    } = path;
+    if (!parentPath.isTaggedTemplateExpression()) path.scope.crawl();
+    const parent = path.findParent(x => x.isTaggedTemplateExpression());
+    if (!parent) return; // Check if the style attribute is being used
 
     if (!state.configTwin.allowStyleProp) {
-      var jsxAttribute = parent.findParent(function (x) { return x.isJSXAttribute(); });
-      var attributeName = jsxAttribute && jsxAttribute.get('name').get('name').node;
-      throwIf(attributeName === 'style', function () { return logStylePropertyError; });
+      const jsxAttribute = parent.findParent(x => x.isJSXAttribute());
+      const attributeName = jsxAttribute && jsxAttribute.get('name').get('name').node;
+      throwIf(attributeName === 'style', () => logStylePropertyError);
     }
 
-    var parsed = parseTte({
+    const parsed = parseTte({
       path: parent,
       types: t,
       styledIdentifier: state.styledIdentifier,
-      state: state
+      state
     });
-    if (!parsed) { return; }
-    var rawClasses = parsed.string; // Add tw-prop for css attributes
+    if (!parsed) return;
+    const rawClasses = parsed.string; // Add tw-prop for css attributes
 
-    var jsxPath = path$$1.findParent(function (p) { return p.isJSXOpeningElement(); });
+    const jsxPath = path.findParent(p => p.isJSXOpeningElement());
 
     if (jsxPath) {
-      var attributes = jsxPath.get('attributes');
-      var pathData = {
-        t: t,
-        attributes: attributes,
-        rawClasses: rawClasses,
+      const attributes = jsxPath.get('attributes');
+      const pathData = {
+        t,
+        attributes,
+        rawClasses,
         path: jsxPath,
-        state: state
+        state
       };
       addDataPropToExistingPath(pathData);
     }
 
-    var ref = getStyleData(rawClasses, {
-      t: t,
-      state: state
+    const {
+      astStyles
+    } = getStyleData(rawClasses, {
+      t,
+      state
     });
-    var styles = ref.styles;
-    replaceWithLocation(parsed.path, styles);
+    replaceWithLocation(parsed.path, astStyles);
   });
 };
 
 /**
- * cs - 'css shorts'
+ * cs = Short css
  */
 
-var handleCsProperty = function (ref) {
-  var path$$1 = ref.path;
-  var t = ref.t;
-  var state = ref.state;
-
-  if (state.configTwin.disableCsProp) { return; }
-  if (!path$$1.node || path$$1.node.name.name !== 'cs') { return; }
+const handleCsProperty = ({
+  path,
+  t,
+  state
+}) => {
+  if (state.configTwin.disableCsProp) return;
+  if (!path.node || path.node.name.name !== 'cs') return;
   state.hasCsProp = true;
-  var isCsOnly = true;
-  var nodeValue = path$$1.node.value; // Allow cs={"property[value]"}
+  const isCsOnly = true;
+  const nodeValue = path.node.value; // Allow cs={"property[value]"}
 
-  var expressionValue = nodeValue.expression && nodeValue.expression.type === 'StringLiteral' && nodeValue.expression.value; // Feedback for unsupported usage
+  const expressionValue = nodeValue.expression && nodeValue.expression.type === 'StringLiteral' && nodeValue.expression.value; // Feedback for unsupported usage
 
-  throwIf(nodeValue.expression && !expressionValue, function () { return logGeneralError("Only plain strings can be used with the \"cs\" prop.\nEg: <div cs=\"maxWidth[30rem]\" />\nRead more at https://twinredirect.page.link/cs-classes"); });
-  var rawClasses = expressionValue || nodeValue.value || '';
-  var ref$1 = getStyleData(rawClasses, {
-    isCsOnly: isCsOnly,
-    t: t,
-    state: state
+  throwIf(nodeValue.expression && !expressionValue, () => logGeneralError(`Only plain strings can be used with the "cs" prop.\nEg: <div cs="maxWidth[30rem]" />\nRead more at https://twinredirect.page.link/cs-classes`));
+  const rawClasses = expressionValue || nodeValue.value || '';
+  const {
+    astStyles
+  } = getStyleData(rawClasses, {
+    isCsOnly,
+    t,
+    state
   });
-  var styles = ref$1.styles;
-  var jsxPath = getParentJSX(path$$1);
-  var attributes = jsxPath.get('attributes');
-  var ref$2 = getCssAttributeData(attributes);
-  var cssAttribute = ref$2.attribute;
+  const jsxPath = getParentJSX(path);
+  const attributes = jsxPath.get('attributes');
+  const {
+    attribute: cssAttribute
+  } = getCssAttributeData(attributes);
 
   if (!cssAttribute) {
     // Replace the tw prop with the css prop
-    path$$1.replaceWith(t.jsxAttribute(t.jsxIdentifier('css'), t.jsxExpressionContainer(styles))); // TODO: Update the naming of this function
+    path.replaceWith(t.jsxAttribute(t.jsxIdentifier('css'), t.jsxExpressionContainer(astStyles))); // TODO: Update the naming of this function
 
     addDataTwPropToPath({
-      t: t,
-      attributes: attributes,
-      rawClasses: rawClasses,
-      path: path$$1,
-      state: state,
+      t,
+      attributes,
+      rawClasses,
+      path,
+      state,
       propName: 'data-cs'
     });
     return;
   } // The expression is the value as a NodePath
 
 
-  var attributeValuePath = cssAttribute.get('value'); // If it's not {} or "", get out of here
+  const attributeValuePath = cssAttribute.get('value'); // If it's not {} or "", get out of here
 
-  if (!attributeValuePath.isJSXExpressionContainer() && !attributeValuePath.isStringLiteral()) { return; }
-  var existingCssAttribute = attributeValuePath.isStringLiteral() ? attributeValuePath : attributeValuePath.get('expression');
-  var attributeNames = getAttributeNames(jsxPath);
-  var isBeforeCssAttribute = attributeNames.indexOf('cs') - attributeNames.indexOf('css') < 0;
+  if (!attributeValuePath.isJSXExpressionContainer() && !attributeValuePath.isStringLiteral()) return;
+  const existingCssAttribute = attributeValuePath.isStringLiteral() ? attributeValuePath : attributeValuePath.get('expression');
+  const attributeNames = getAttributeNames(jsxPath);
+  const isBeforeCssAttribute = attributeNames.indexOf('cs') - attributeNames.indexOf('css') < 0;
 
   if (existingCssAttribute.isArrayExpression()) {
     //  The existing css prop is an array, eg: css={[...]}
-    isBeforeCssAttribute ? existingCssAttribute.unshiftContainer('elements', styles) : existingCssAttribute.pushContainer('elements', styles);
+    isBeforeCssAttribute ? existingCssAttribute.unshiftContainer('elements', astStyles) : existingCssAttribute.pushContainer('elements', astStyles);
   } else {
     // css prop is either:
     // TemplateLiteral
@@ -8642,203 +7247,211 @@ var handleCsProperty = function (ref) {
     // <div css={{ ... }} cs="..." />
     // or ArrowFunctionExpression/FunctionExpression
     // <div css={() => (...)} cs="..." />
-    var existingCssAttributeNode = existingCssAttribute.node; // The existing css prop is an array, eg: css={[...]}
+    const existingCssAttributeNode = existingCssAttribute.node; // The existing css prop is an array, eg: css={[...]}
 
-    var styleArray = isBeforeCssAttribute ? [styles, existingCssAttributeNode] : [existingCssAttributeNode, styles];
-    var arrayExpression = t.arrayExpression(styleArray);
-    var parent = existingCssAttribute.parent;
-    var replacement = parent.type === 'JSXAttribute' ? t.jsxExpressionContainer(arrayExpression) : arrayExpression;
+    const styleArray = isBeforeCssAttribute ? [astStyles, existingCssAttributeNode] : [existingCssAttributeNode, astStyles];
+    const arrayExpression = t.arrayExpression(styleArray);
+    const {
+      parent
+    } = existingCssAttribute;
+    const replacement = parent.type === 'JSXAttribute' ? t.jsxExpressionContainer(arrayExpression) : arrayExpression;
     existingCssAttribute.replaceWith(replacement);
   }
 
-  path$$1.remove(); // remove the cs prop
+  path.remove(); // remove the cs prop
 
   addDataPropToExistingPath({
-    t: t,
-    attributes: attributes,
-    rawClasses: rawClasses,
+    t,
+    attributes,
+    rawClasses,
     path: jsxPath,
-    state: state,
+    state,
     propName: 'data-cs'
   });
 };
 
-var makeJsxAttribute = function (ref, t) {
-  var key = ref[0];
-  var value = ref[1];
+const makeJsxAttribute = ([key, value], t) => t.jsxAttribute(t.jsxIdentifier(key), t.jsxExpressionContainer(value));
 
-  return t.jsxAttribute(t.jsxIdentifier(key), t.jsxExpressionContainer(value));
-};
+const handleClassNameProperty = ({
+  path,
+  t,
+  state
+}) => {
+  if (!state.configTwin.includeClassNames) return;
+  if (path.node.name.name !== 'className') return;
+  const nodeValue = path.node.value; // Ignore className if it cannot be resolved
 
-var handleClassNameProperty = function (ref) {
-  var path$$1 = ref.path;
-  var t = ref.t;
-  var state = ref.state;
-
-  if (!state.configTwin.includeClassNames) { return; }
-  if (path$$1.node.name.name !== 'className') { return; }
-  var nodeValue = path$$1.node.value; // Ignore className if it cannot be resolved
-
-  if (nodeValue.expression) { return; }
-  var rawClasses = nodeValue.value || '';
-  if (!rawClasses) { return; }
-  var ref$1 = getStyleData(rawClasses, {
+  if (nodeValue.expression) return;
+  const rawClasses = nodeValue.value || '';
+  if (!rawClasses) return;
+  const {
+    astStyles,
+    mismatched,
+    matched
+  } = getStyleData(rawClasses, {
     silentMismatches: true,
-    t: t,
-    state: state
+    t,
+    state
   });
-  var styles = ref$1.styles;
-  var mismatched = ref$1.mismatched;
-  var matched = ref$1.matched;
-  if (!matched) { return; } // When classes can't be matched we add them back into the className (it exists as a few properties)
+  if (!matched) return; // When classes can't be matched we add them back into the className (it exists as a few properties)
 
-  path$$1.node.value.value = mismatched;
-  path$$1.node.value.extra.rawValue = mismatched;
-  path$$1.node.value.extra.raw = "\"" + mismatched + "\"";
-  var jsxPath = getParentJSX(path$$1);
-  var attributes = jsxPath.get('attributes');
-  var ref$2 = getCssAttributeData(attributes);
-  var cssAttribute = ref$2.attribute;
+  path.node.value.value = mismatched;
+  path.node.value.extra.rawValue = mismatched;
+  path.node.value.extra.raw = `"${mismatched}"`;
+  const jsxPath = getParentJSX(path);
+  const attributes = jsxPath.get('attributes');
+  const {
+    attribute: cssAttribute
+  } = getCssAttributeData(attributes);
 
   if (!cssAttribute) {
-    var attribute = makeJsxAttribute(['css', styles], t);
-    mismatched ? path$$1.insertAfter(attribute) : path$$1.replaceWith(attribute);
+    const attribute = makeJsxAttribute(['css', astStyles], t);
+    mismatched ? path.insertAfter(attribute) : path.replaceWith(attribute);
     addDataTwPropToPath({
-      t: t,
-      attributes: attributes,
+      t,
+      attributes,
       rawClasses: matched,
-      path: path$$1,
-      state: state
+      path,
+      state
     });
     return;
   }
 
-  var cssExpression = cssAttribute.get('value').get('expression');
-  var attributeNames = getAttributeNames(jsxPath);
-  var isBeforeCssAttribute = attributeNames.indexOf('className') - attributeNames.indexOf('css') < 0;
+  const cssExpression = cssAttribute.get('value').get('expression');
+  const attributeNames = getAttributeNames(jsxPath);
+  const isBeforeCssAttribute = attributeNames.indexOf('className') - attributeNames.indexOf('css') < 0;
 
   if (cssExpression.isArrayExpression()) {
     //  The existing css prop is an array, eg: css={[...]}
-    isBeforeCssAttribute ? cssExpression.unshiftContainer('elements', styles) : cssExpression.pushContainer('elements', styles);
+    isBeforeCssAttribute ? cssExpression.unshiftContainer('elements', astStyles) : cssExpression.pushContainer('elements', astStyles);
   } else {
     // The existing css prop is not an array, eg: css={{ ... }} / css={`...`}
-    var existingCssAttribute = cssExpression.node;
-    throwIf(!existingCssAttribute, function () { return logGeneralError("An empty css prop (css=\"\") isn’t supported alongside the className prop"); });
-    var styleArray = isBeforeCssAttribute ? [styles, existingCssAttribute] : [existingCssAttribute, styles];
+    const existingCssAttribute = cssExpression.node;
+    throwIf(!existingCssAttribute, () => logGeneralError(`An empty css prop (css="") isn’t supported alongside the className prop`));
+    const styleArray = isBeforeCssAttribute ? [astStyles, existingCssAttribute] : [existingCssAttribute, astStyles];
     cssExpression.replaceWith(t.arrayExpression(styleArray));
   }
 
-  if (!mismatched) { path$$1.remove(); }
+  if (!mismatched) path.remove();
   addDataPropToExistingPath({
-    t: t,
-    attributes: attributes,
+    t,
+    attributes,
     rawClasses: matched,
     path: jsxPath,
-    state: state
+    state
   });
 };
 
 function dlv(t,e,l,n,r){for(e=e.split?e.split("."):e,n=0;n<e.length;n++)t=t?t[e[n]]:r;return t===r?l:t}
 
-function unwrapExports (x) {
+function getDefaultExportFromCjs (x) {
 	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
 }
 
-function createCommonjsModule(fn, module) {
-	return module = { exports: {} }, fn(module, module.exports), module.exports;
+function createCommonjsModule(fn) {
+  var module = { exports: {} };
+	return fn(module, module.exports), module.exports;
 }
-
-var indexesOf = function (ary, item) {
-  var i = -1, indexes = [];
-  while((i = ary.indexOf(item, i + 1)) !== -1)
-    indexes.push(i);
-  return indexes
-};
-
-function unique_pred(list, compare) {
-  var ptr = 1
-    , len = list.length
-    , a=list[0], b=list[0];
-  for(var i=1; i<len; ++i) {
-    b = a;
-    a = list[i];
-    if(compare(a, b)) {
-      if(i === ptr) {
-        ptr++;
-        continue
-      }
-      list[ptr++] = a;
-    }
-  }
-  list.length = ptr;
-  return list
-}
-
-function unique_eq(list) {
-  var ptr = 1
-    , len = list.length
-    , a=list[0], b = list[0];
-  for(var i=1; i<len; ++i, b=a) {
-    b = a;
-    a = list[i];
-    if(a !== b) {
-      if(i === ptr) {
-        ptr++;
-        continue
-      }
-      list[ptr++] = a;
-    }
-  }
-  list.length = ptr;
-  return list
-}
-
-function unique(list, compare, sorted) {
-  if(list.length === 0) {
-    return list
-  }
-  if(compare) {
-    if(!sorted) {
-      list.sort(compare);
-    }
-    return unique_pred(list, compare)
-  }
-  if(!sorted) {
-    list.sort();
-  }
-  return unique_eq(list)
-}
-
-var uniq = unique;
 
 var unesc_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = unesc;
-var whitespace = '[\\x20\\t\\r\\n\\f]';
-var unescapeRegExp = new RegExp('\\\\([\\da-f]{1,6}' + whitespace + '?|(' + whitespace + ')|.)', 'ig');
+exports["default"] = unesc;
+
+// Many thanks for this post which made this migration much easier.
+// https://mathiasbynens.be/notes/css-escapes
+
+/**
+ * 
+ * @param {string} str 
+ * @returns {[string, number]|undefined}
+ */
+function gobbleHex(str) {
+  var lower = str.toLowerCase();
+  var hex = '';
+  var spaceTerminated = false;
+
+  for (var i = 0; i < 6 && lower[i] !== undefined; i++) {
+    var code = lower.charCodeAt(i); // check to see if we are dealing with a valid hex char [a-f|0-9]
+
+    var valid = code >= 97 && code <= 102 || code >= 48 && code <= 57; // https://drafts.csswg.org/css-syntax/#consume-escaped-code-point
+
+    spaceTerminated = code === 32;
+
+    if (!valid) {
+      break;
+    }
+
+    hex += lower[i];
+  }
+
+  if (hex.length === 0) {
+    return undefined;
+  }
+
+  var codePoint = parseInt(hex, 16);
+  var isSurrogate = codePoint >= 0xD800 && codePoint <= 0xDFFF; // Add special case for
+  // "If this number is zero, or is for a surrogate, or is greater than the maximum allowed code point"
+  // https://drafts.csswg.org/css-syntax/#maximum-allowed-code-point
+
+  if (isSurrogate || codePoint === 0x0000 || codePoint > 0x10FFFF) {
+    return ["\uFFFD", hex.length + (spaceTerminated ? 1 : 0)];
+  }
+
+  return [String.fromCodePoint(codePoint), hex.length + (spaceTerminated ? 1 : 0)];
+}
+
+var CONTAINS_ESCAPE = /\\/;
 
 function unesc(str) {
-  return str.replace(unescapeRegExp, function (_, escaped, escapedWhitespace) {
-    var high = '0x' + escaped - 0x10000; // NaN means non-codepoint
-    // Workaround erroneous numeric interpretation of +"0x"
-    // eslint-disable-next-line no-self-compare
+  var needToProcess = CONTAINS_ESCAPE.test(str);
 
-    return high !== high || escapedWhitespace ? escaped : high < 0 ? // BMP codepoint
-    String.fromCharCode(high + 0x10000) : // Supplemental Plane codepoint (surrogate pair)
-    String.fromCharCode(high >> 10 | 0xd800, high & 0x3ff | 0xdc00);
-  });
+  if (!needToProcess) {
+    return str;
+  }
+
+  var ret = "";
+
+  for (var i = 0; i < str.length; i++) {
+    if (str[i] === "\\") {
+      var gobbled = gobbleHex(str.slice(i + 1, i + 7));
+
+      if (gobbled !== undefined) {
+        ret += gobbled[0];
+        i += gobbled[1];
+        continue;
+      } // Retain a pair of \\ if double escaped `\\\\`
+      // https://github.com/postcss/postcss-selector-parser/commit/268c9a7656fb53f543dc620aa5b73a30ec3ff20e
+
+
+      if (str[i + 1] === "\\") {
+        ret += "\\";
+        i++;
+        continue;
+      } // if \\ is at the end of the string retain it
+      // https://github.com/postcss/postcss-selector-parser/commit/01a6b346e3612ce1ab20219acc26abdc259ccefb
+
+
+      if (str.length === i + 1) {
+        ret += str[i];
+      }
+
+      continue;
+    }
+
+    ret += str[i];
+  }
+
+  return ret;
 }
 
 module.exports = exports.default;
 });
 
-unwrapExports(unesc_1);
-
 var getProp_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = getProp;
+exports["default"] = getProp;
 
 function getProp(obj) {
   for (var _len = arguments.length, props = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
@@ -8861,12 +7474,10 @@ function getProp(obj) {
 module.exports = exports.default;
 });
 
-unwrapExports(getProp_1);
-
 var ensureObject_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = ensureObject;
+exports["default"] = ensureObject;
 
 function ensureObject(obj) {
   for (var _len = arguments.length, props = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
@@ -8887,12 +7498,10 @@ function ensureObject(obj) {
 module.exports = exports.default;
 });
 
-unwrapExports(ensureObject_1);
-
 var stripComments_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = stripComments;
+exports["default"] = stripComments;
 
 function stripComments(str) {
   var s = "";
@@ -8918,38 +7527,34 @@ function stripComments(str) {
 module.exports = exports.default;
 });
 
-unwrapExports(stripComments_1);
-
-var util$1 = createCommonjsModule(function (module, exports) {
+var util = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
 exports.stripComments = exports.ensureObject = exports.getProp = exports.unesc = void 0;
 
 var _unesc = _interopRequireDefault(unesc_1);
 
-exports.unesc = _unesc.default;
+exports.unesc = _unesc["default"];
 
 var _getProp = _interopRequireDefault(getProp_1);
 
-exports.getProp = _getProp.default;
+exports.getProp = _getProp["default"];
 
 var _ensureObject = _interopRequireDefault(ensureObject_1);
 
-exports.ensureObject = _ensureObject.default;
+exports.ensureObject = _ensureObject["default"];
 
 var _stripComments = _interopRequireDefault(stripComments_1);
 
-exports.stripComments = _stripComments.default;
+exports.stripComments = _stripComments["default"];
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 });
 
-unwrapExports(util$1);
-
-var node = createCommonjsModule(function (module, exports) {
+var node$1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 
 
@@ -8988,9 +7593,7 @@ var cloneNode = function cloneNode(obj, parent) {
   return cloned;
 };
 
-var Node =
-/*#__PURE__*/
-function () {
+var Node = /*#__PURE__*/function () {
   function Node(opts) {
     if (opts === void 0) {
       opts = {};
@@ -9108,7 +7711,7 @@ function () {
     }
   }
   /**
-   * 
+   *
    * @param {number} line The number (starting with 1)
    * @param {number} column The column number (starting with 1)
    */
@@ -9142,13 +7745,17 @@ function () {
     return this.raws && this.raws[name] || this[name];
   };
 
+  _proto.valueToString = function valueToString() {
+    return String(this.stringifyProperty("value"));
+  };
+
   _proto.toString = function toString() {
-    return [this.rawSpaceBefore, String(this.stringifyProperty("value")), this.rawSpaceAfter].join('');
+    return [this.rawSpaceBefore, this.valueToString(), this.rawSpaceAfter].join('');
   };
 
   _createClass(Node, [{
     key: "rawSpaceBefore",
-    get: function get$$1() {
+    get: function get() {
       var rawSpace = this.raws && this.raws.spaces && this.raws.spaces.before;
 
       if (rawSpace === undefined) {
@@ -9158,12 +7765,12 @@ function () {
       return rawSpace || "";
     },
     set: function set(raw) {
-      (0, util$1.ensureObject)(this, "raws", "spaces");
+      (0, util.ensureObject)(this, "raws", "spaces");
       this.raws.spaces.before = raw;
     }
   }, {
     key: "rawSpaceAfter",
-    get: function get$$1() {
+    get: function get() {
       var rawSpace = this.raws && this.raws.spaces && this.raws.spaces.after;
 
       if (rawSpace === undefined) {
@@ -9173,7 +7780,7 @@ function () {
       return rawSpace || "";
     },
     set: function set(raw) {
-      (0, util$1.ensureObject)(this, "raws", "spaces");
+      (0, util.ensureObject)(this, "raws", "spaces");
       this.raws.spaces.after = raw;
     }
   }]);
@@ -9181,11 +7788,9 @@ function () {
   return Node;
 }();
 
-exports.default = Node;
+exports["default"] = Node;
 module.exports = exports.default;
 });
-
-unwrapExports(node);
 
 var types = createCommonjsModule(function (module, exports) {
 
@@ -9217,30 +7822,36 @@ var UNIVERSAL = 'universal';
 exports.UNIVERSAL = UNIVERSAL;
 });
 
-unwrapExports(types);
-
-var container$1 = createCommonjsModule(function (module, exports) {
+var container = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
-var types$$1 = _interopRequireWildcard(types);
+var types$1 = _interopRequireWildcard(types);
 
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function _getRequireWildcardCache() { return cache; }; return cache; }
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { "default": obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj["default"] = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
+
+function _createForOfIteratorHelperLoose(o, allowArrayLike) { var it; if (typeof Symbol === "undefined" || o[Symbol.iterator] == null) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; return function () { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } it = o[Symbol.iterator](); return it.next.bind(it); }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Container =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Container = /*#__PURE__*/function (_Node) {
   _inheritsLoose(Container, _Node);
 
   function Container(opts) {
@@ -9299,20 +7910,9 @@ function (_Node) {
   };
 
   _proto.removeAll = function removeAll() {
-    for (var _iterator = this.nodes, _isArray = Array.isArray(_iterator), _i = 0, _iterator = _isArray ? _iterator : _iterator[Symbol.iterator]();;) {
-      var _ref;
-
-      if (_isArray) {
-        if (_i >= _iterator.length) break;
-        _ref = _iterator[_i++];
-      } else {
-        _i = _iterator.next();
-        if (_i.done) break;
-        _ref = _i.value;
-      }
-
-      var node$$1 = _ref;
-      node$$1.parent = undefined;
+    for (var _iterator = _createForOfIteratorHelperLoose(this.nodes), _step; !(_step = _iterator()).done;) {
+      var node = _step.value;
+      node.parent = undefined;
     }
 
     this.nodes = [];
@@ -9361,16 +7961,16 @@ function (_Node) {
 
   _proto._findChildAtPosition = function _findChildAtPosition(line, col) {
     var found = undefined;
-    this.each(function (node$$1) {
-      if (node$$1.atPosition) {
-        var foundChild = node$$1.atPosition(line, col);
+    this.each(function (node) {
+      if (node.atPosition) {
+        var foundChild = node.atPosition(line, col);
 
         if (foundChild) {
           found = foundChild;
           return false;
         }
-      } else if (node$$1.isAtPosition(line, col)) {
-        found = node$$1;
+      } else if (node.isAtPosition(line, col)) {
+        found = node;
         return false;
       }
     });
@@ -9445,11 +8045,11 @@ function (_Node) {
   };
 
   _proto.walk = function walk(callback) {
-    return this.each(function (node$$1, i) {
-      var result = callback(node$$1, i);
+    return this.each(function (node, i) {
+      var result = callback(node, i);
 
-      if (result !== false && node$$1.length) {
-        result = node$$1.walk(callback);
+      if (result !== false && node.length) {
+        result = node.walk(callback);
       }
 
       if (result === false) {
@@ -9462,7 +8062,7 @@ function (_Node) {
     var _this2 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.ATTRIBUTE) {
+      if (selector.type === types$1.ATTRIBUTE) {
         return callback.call(_this2, selector);
       }
     });
@@ -9472,7 +8072,7 @@ function (_Node) {
     var _this3 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.CLASS) {
+      if (selector.type === types$1.CLASS) {
         return callback.call(_this3, selector);
       }
     });
@@ -9482,7 +8082,7 @@ function (_Node) {
     var _this4 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.COMBINATOR) {
+      if (selector.type === types$1.COMBINATOR) {
         return callback.call(_this4, selector);
       }
     });
@@ -9492,7 +8092,7 @@ function (_Node) {
     var _this5 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.COMMENT) {
+      if (selector.type === types$1.COMMENT) {
         return callback.call(_this5, selector);
       }
     });
@@ -9502,7 +8102,7 @@ function (_Node) {
     var _this6 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.ID) {
+      if (selector.type === types$1.ID) {
         return callback.call(_this6, selector);
       }
     });
@@ -9512,7 +8112,7 @@ function (_Node) {
     var _this7 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.NESTING) {
+      if (selector.type === types$1.NESTING) {
         return callback.call(_this7, selector);
       }
     });
@@ -9522,7 +8122,7 @@ function (_Node) {
     var _this8 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.PSEUDO) {
+      if (selector.type === types$1.PSEUDO) {
         return callback.call(_this8, selector);
       }
     });
@@ -9532,7 +8132,7 @@ function (_Node) {
     var _this9 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.TAG) {
+      if (selector.type === types$1.TAG) {
         return callback.call(_this9, selector);
       }
     });
@@ -9542,7 +8142,7 @@ function (_Node) {
     var _this10 = this;
 
     return this.walk(function (selector) {
-      if (selector.type === types$$1.UNIVERSAL) {
+      if (selector.type === types$1.UNIVERSAL) {
         return callback.call(_this10, selector);
       }
     });
@@ -9552,9 +8152,9 @@ function (_Node) {
     var _this11 = this;
 
     var current = [];
-    return this.reduce(function (memo, node$$1, index) {
-      var split = callback.call(_this11, node$$1);
-      current.push(node$$1);
+    return this.reduce(function (memo, node, index) {
+      var split = callback.call(_this11, node);
+      current.push(node);
 
       if (split) {
         memo.push(current);
@@ -9597,50 +8197,48 @@ function (_Node) {
 
   _createClass(Container, [{
     key: "first",
-    get: function get$$1() {
+    get: function get() {
       return this.at(0);
     }
   }, {
     key: "last",
-    get: function get$$1() {
+    get: function get() {
       return this.at(this.length - 1);
     }
   }, {
     key: "length",
-    get: function get$$1() {
+    get: function get() {
       return this.nodes.length;
     }
   }]);
 
   return Container;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = Container;
+exports["default"] = Container;
 module.exports = exports.default;
 });
-
-unwrapExports(container$1);
 
 var root = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _container = _interopRequireDefault(container$1);
+var _container = _interopRequireDefault(container);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Root =
-/*#__PURE__*/
-function (_Container) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Root = /*#__PURE__*/function (_Container) {
   _inheritsLoose(Root, _Container);
 
   function Root(opts) {
@@ -9677,30 +8275,28 @@ function (_Container) {
   }]);
 
   return Root;
-}(_container.default);
+}(_container["default"]);
 
-exports.default = Root;
+exports["default"] = Root;
 module.exports = exports.default;
 });
-
-unwrapExports(root);
 
 var selector = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _container = _interopRequireDefault(container$1);
+var _container = _interopRequireDefault(container);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Selector =
-/*#__PURE__*/
-function (_Container) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Selector = /*#__PURE__*/function (_Container) {
   _inheritsLoose(Selector, _Container);
 
   function Selector(opts) {
@@ -9712,13 +8308,11 @@ function (_Container) {
   }
 
   return Selector;
-}(_container.default);
+}(_container["default"]);
 
-exports.default = Selector;
+exports["default"] = Selector;
 module.exports = exports.default;
 });
-
-unwrapExports(selector);
 
 /*! https://mths.be/cssesc v3.0.0 by @mathias */
 
@@ -9832,27 +8426,27 @@ var cssesc_1 = cssesc;
 var className = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _cssesc = _interopRequireDefault(cssesc_1);
 
 
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var ClassName =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var ClassName = /*#__PURE__*/function (_Node) {
   _inheritsLoose(ClassName, _Node);
 
   function ClassName(opts) {
@@ -9866,20 +8460,23 @@ function (_Node) {
 
   var _proto = ClassName.prototype;
 
-  _proto.toString = function toString() {
-    return [this.rawSpaceBefore, String('.' + this.stringifyProperty("value")), this.rawSpaceAfter].join('');
+  _proto.valueToString = function valueToString() {
+    return '.' + _Node.prototype.valueToString.call(this);
   };
 
   _createClass(ClassName, [{
     key: "value",
+    get: function get() {
+      return this._value;
+    },
     set: function set(v) {
       if (this._constructed) {
-        var escaped = (0, _cssesc.default)(v, {
+        var escaped = (0, _cssesc["default"])(v, {
           isIdentifier: true
         });
 
         if (escaped !== v) {
-          (0, util$1.ensureObject)(this, "raws");
+          (0, util.ensureObject)(this, "raws");
           this.raws.value = escaped;
         } else if (this.raws) {
           delete this.raws.value;
@@ -9887,37 +8484,32 @@ function (_Node) {
       }
 
       this._value = v;
-    },
-    get: function get$$1() {
-      return this._value;
     }
   }]);
 
   return ClassName;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = ClassName;
+exports["default"] = ClassName;
 module.exports = exports.default;
 });
-
-unwrapExports(className);
 
 var comment = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Comment =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Comment = /*#__PURE__*/function (_Node) {
   _inheritsLoose(Comment, _Node);
 
   function Comment(opts) {
@@ -9929,30 +8521,28 @@ function (_Node) {
   }
 
   return Comment;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = Comment;
+exports["default"] = Comment;
 module.exports = exports.default;
 });
-
-unwrapExports(comment);
 
 var id = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var ID =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var ID = /*#__PURE__*/function (_Node) {
   _inheritsLoose(ID, _Node);
 
   function ID(opts) {
@@ -9965,41 +8555,39 @@ function (_Node) {
 
   var _proto = ID.prototype;
 
-  _proto.toString = function toString() {
-    return [this.rawSpaceBefore, String('#' + this.stringifyProperty("value")), this.rawSpaceAfter].join('');
+  _proto.valueToString = function valueToString() {
+    return '#' + _Node.prototype.valueToString.call(this);
   };
 
   return ID;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = ID;
+exports["default"] = ID;
 module.exports = exports.default;
 });
-
-unwrapExports(id);
 
 var namespace = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _cssesc = _interopRequireDefault(cssesc_1);
 
 
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Namespace =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Namespace = /*#__PURE__*/function (_Node) {
   _inheritsLoose(Namespace, _Node);
 
   function Namespace() {
@@ -10016,13 +8604,13 @@ function (_Node) {
     }
   };
 
-  _proto.toString = function toString() {
-    return [this.rawSpaceBefore, this.qualifiedName(this.stringifyProperty("value")), this.rawSpaceAfter].join('');
+  _proto.valueToString = function valueToString() {
+    return this.qualifiedName(_Node.prototype.valueToString.call(this));
   };
 
   _createClass(Namespace, [{
     key: "namespace",
-    get: function get$$1() {
+    get: function get() {
       return this._namespace;
     },
     set: function set(namespace) {
@@ -10036,13 +8624,13 @@ function (_Node) {
         return;
       }
 
-      var escaped = (0, _cssesc.default)(namespace, {
+      var escaped = (0, _cssesc["default"])(namespace, {
         isIdentifier: true
       });
       this._namespace = namespace;
 
       if (escaped !== namespace) {
-        (0, util$1.ensureObject)(this, "raws");
+        (0, util.ensureObject)(this, "raws");
         this.raws.namespace = escaped;
       } else if (this.raws) {
         delete this.raws.namespace;
@@ -10050,7 +8638,7 @@ function (_Node) {
     }
   }, {
     key: "ns",
-    get: function get$$1() {
+    get: function get() {
       return this._namespace;
     },
     set: function set(namespace) {
@@ -10058,7 +8646,7 @@ function (_Node) {
     }
   }, {
     key: "namespaceString",
-    get: function get$$1() {
+    get: function get() {
       if (this.namespace) {
         var ns = this.stringifyProperty("namespace");
 
@@ -10074,30 +8662,28 @@ function (_Node) {
   }]);
 
   return Namespace;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = Namespace;
+exports["default"] = Namespace;
 module.exports = exports.default;
 });
-
-unwrapExports(namespace);
 
 var tag = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _namespace = _interopRequireDefault(namespace);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Tag =
-/*#__PURE__*/
-function (_Namespace) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Tag = /*#__PURE__*/function (_Namespace) {
   _inheritsLoose(Tag, _Namespace);
 
   function Tag(opts) {
@@ -10109,30 +8695,28 @@ function (_Namespace) {
   }
 
   return Tag;
-}(_namespace.default);
+}(_namespace["default"]);
 
-exports.default = Tag;
+exports["default"] = Tag;
 module.exports = exports.default;
 });
-
-unwrapExports(tag);
 
 var string = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var String =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var String = /*#__PURE__*/function (_Node) {
   _inheritsLoose(String, _Node);
 
   function String(opts) {
@@ -10144,30 +8728,28 @@ function (_Node) {
   }
 
   return String;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = String;
+exports["default"] = String;
 module.exports = exports.default;
 });
-
-unwrapExports(string);
 
 var pseudo = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _container = _interopRequireDefault(container$1);
+var _container = _interopRequireDefault(container);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Pseudo =
-/*#__PURE__*/
-function (_Container) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Pseudo = /*#__PURE__*/function (_Container) {
   _inheritsLoose(Pseudo, _Container);
 
   function Pseudo(opts) {
@@ -10186,19 +8768,23 @@ function (_Container) {
   };
 
   return Pseudo;
-}(_container.default);
+}(_container["default"]);
 
-exports.default = Pseudo;
+exports["default"] = Pseudo;
 module.exports = exports.default;
 });
 
-unwrapExports(pseudo);
+/**
+ * For Node.js, simply re-export the core `util.deprecate` function.
+ */
+
+var node = require$$0__default["default"].deprecate;
 
 var attribute = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
 exports.unescapeValue = unescapeValue;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _cssesc = _interopRequireDefault(cssesc_1);
 
@@ -10210,20 +8796,22 @@ var _namespace = _interopRequireDefault(namespace);
 
 var _CSSESC_QUOTE_OPTIONS;
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
 function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var deprecate = util.deprecate;
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
 
-var WRAPPED_IN_QUOTES = /^('|")(.*)\1$/;
-var warnOfDeprecatedValueAssignment = deprecate(function () {}, "Assigning an attribute a value containing characters that might need to be escaped is deprecated. " + "Call attribute.setValue() instead.");
-var warnOfDeprecatedQuotedAssignment = deprecate(function () {}, "Assigning attr.quoted is deprecated and has no effect. Assign to attr.quoteMark instead.");
-var warnOfDeprecatedConstructor = deprecate(function () {}, "Constructing an Attribute selector with a value without specifying quoteMark is deprecated. Note: The value should be unescaped now.");
+
+
+var WRAPPED_IN_QUOTES = /^('|")([^]*)\1$/;
+var warnOfDeprecatedValueAssignment = node(function () {}, "Assigning an attribute a value containing characters that might need to be escaped is deprecated. " + "Call attribute.setValue() instead.");
+var warnOfDeprecatedQuotedAssignment = node(function () {}, "Assigning attr.quoted is deprecated and has no effect. Assign to attr.quoteMark instead.");
+var warnOfDeprecatedConstructor = node(function () {}, "Constructing an Attribute selector with a value without specifying quoteMark is deprecated. Note: The value should be unescaped now.");
 
 function unescapeValue(value) {
   var deprecatedUsage = false;
@@ -10236,7 +8824,7 @@ function unescapeValue(value) {
     unescaped = m[2];
   }
 
-  unescaped = (0, _unesc.default)(unescaped);
+  unescaped = (0, _unesc["default"])(unescaped);
 
   if (unescaped !== value) {
     deprecatedUsage = true;
@@ -10277,9 +8865,7 @@ function handleDeprecatedContructorOpts(opts) {
   return opts;
 }
 
-var Attribute =
-/*#__PURE__*/
-function (_Namespace) {
+var Attribute = /*#__PURE__*/function (_Namespace) {
   _inheritsLoose(Attribute, _Namespace);
 
   function Attribute(opts) {
@@ -10293,10 +8879,10 @@ function (_Namespace) {
     _this.type = types.ATTRIBUTE;
     _this.raws = _this.raws || {};
     Object.defineProperty(_this.raws, 'unquoted', {
-      get: deprecate(function () {
+      get: node(function () {
         return _this.value;
       }, "attr.raws.unquoted is deprecated. Call attr.value instead."),
-      set: deprecate(function () {
+      set: node(function () {
         return _this.value;
       }, "Setting attr.raws.unquoted is deprecated and has no effect. attr.value is unescaped by default now.")
     });
@@ -10336,7 +8922,7 @@ function (_Namespace) {
     var quoteMark = this._determineQuoteMark(options);
 
     var cssescopts = CSSESC_QUOTE_OPTIONS[quoteMark];
-    var escaped = (0, _cssesc.default)(this._value, cssescopts);
+    var escaped = (0, _cssesc["default"])(this._value, cssescopts);
     return escaped;
   };
 
@@ -10380,7 +8966,7 @@ function (_Namespace) {
     var numDoubleQuotes = v.replace(/[^"]/g, '').length;
 
     if (numSingleQuotes + numDoubleQuotes === 0) {
-      var escaped = (0, _cssesc.default)(v, {
+      var escaped = (0, _cssesc["default"])(v, {
         isIdentifier: true
       });
 
@@ -10393,7 +8979,7 @@ function (_Namespace) {
           // pick a quote mark that isn't none and see if it's smaller
           var quote = this.quoteMark || options.quoteMark || Attribute.DOUBLE_QUOTE;
           var opts = CSSESC_QUOTE_OPTIONS[quote];
-          var quoteValue = (0, _cssesc.default)(v, opts);
+          var quoteValue = (0, _cssesc["default"])(v, opts);
 
           if (quoteValue.length < escaped.length) {
             return quote;
@@ -10432,7 +9018,7 @@ function (_Namespace) {
   };
 
   _proto._syncRawValue = function _syncRawValue() {
-    var rawValue = (0, _cssesc.default)(this._value, CSSESC_QUOTE_OPTIONS[this.quoteMark]);
+    var rawValue = (0, _cssesc["default"])(this._value, CSSESC_QUOTE_OPTIONS[this.quoteMark]);
 
     if (rawValue === this._value) {
       if (this.raws) {
@@ -10445,7 +9031,7 @@ function (_Namespace) {
 
   _proto._handleEscapes = function _handleEscapes(prop, value) {
     if (this._constructed) {
-      var escaped = (0, _cssesc.default)(value, {
+      var escaped = (0, _cssesc["default"])(value, {
         isIdentifier: true
       });
 
@@ -10584,7 +9170,7 @@ function (_Namespace) {
 
   _createClass(Attribute, [{
     key: "quoted",
-    get: function get$$1() {
+    get: function get() {
       var qm = this.quoteMark;
       return qm === "'" || qm === '"';
     },
@@ -10600,7 +9186,7 @@ function (_Namespace) {
 
   }, {
     key: "quoteMark",
-    get: function get$$1() {
+    get: function get() {
       return this._quoteMark;
     }
     /**
@@ -10625,17 +9211,17 @@ function (_Namespace) {
     }
   }, {
     key: "qualifiedAttribute",
-    get: function get$$1() {
+    get: function get() {
       return this.qualifiedName(this.raws.attribute || this.attribute);
     }
   }, {
     key: "insensitiveFlag",
-    get: function get$$1() {
+    get: function get() {
       return this.insensitive ? 'i' : '';
     }
   }, {
     key: "value",
-    get: function get$$1() {
+    get: function get() {
       return this._value;
     }
     /**
@@ -10676,7 +9262,7 @@ function (_Namespace) {
     }
   }, {
     key: "attribute",
-    get: function get$$1() {
+    get: function get() {
       return this._attribute;
     },
     set: function set(name) {
@@ -10687,9 +9273,9 @@ function (_Namespace) {
   }]);
 
   return Attribute;
-}(_namespace.default);
+}(_namespace["default"]);
 
-exports.default = Attribute;
+exports["default"] = Attribute;
 Attribute.NO_QUOTE = null;
 Attribute.SINGLE_QUOTE = "'";
 Attribute.DOUBLE_QUOTE = '"';
@@ -10711,24 +9297,22 @@ function defaultAttrConcat(attrValue, attrSpaces) {
 }
 });
 
-unwrapExports(attribute);
-
 var universal = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _namespace = _interopRequireDefault(namespace);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Universal =
-/*#__PURE__*/
-function (_Namespace) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Universal = /*#__PURE__*/function (_Namespace) {
   _inheritsLoose(Universal, _Namespace);
 
   function Universal(opts) {
@@ -10741,30 +9325,28 @@ function (_Namespace) {
   }
 
   return Universal;
-}(_namespace.default);
+}(_namespace["default"]);
 
-exports.default = Universal;
+exports["default"] = Universal;
 module.exports = exports.default;
 });
-
-unwrapExports(universal);
 
 var combinator = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Combinator =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Combinator = /*#__PURE__*/function (_Node) {
   _inheritsLoose(Combinator, _Node);
 
   function Combinator(opts) {
@@ -10776,30 +9358,28 @@ function (_Node) {
   }
 
   return Combinator;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = Combinator;
+exports["default"] = Combinator;
 module.exports = exports.default;
 });
-
-unwrapExports(combinator);
 
 var nesting = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
-var _node = _interopRequireDefault(node);
+var _node = _interopRequireDefault(node$1);
 
 
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
+function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; _setPrototypeOf(subClass, superClass); }
 
-var Nesting =
-/*#__PURE__*/
-function (_Node) {
+function _setPrototypeOf(o, p) { _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) { o.__proto__ = p; return o; }; return _setPrototypeOf(o, p); }
+
+var Nesting = /*#__PURE__*/function (_Node) {
   _inheritsLoose(Nesting, _Node);
 
   function Nesting(opts) {
@@ -10812,18 +9392,16 @@ function (_Node) {
   }
 
   return Nesting;
-}(_node.default);
+}(_node["default"]);
 
-exports.default = Nesting;
+exports["default"] = Nesting;
 module.exports = exports.default;
 });
-
-unwrapExports(nesting);
 
 var sortAscending_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = sortAscending;
+exports["default"] = sortAscending;
 
 function sortAscending(list) {
   return list.sort(function (a, b) {
@@ -10832,8 +9410,6 @@ function sortAscending(list) {
 }
 module.exports = exports.default;
 });
-
-unwrapExports(sortAscending_1);
 
 var tokenTypes = createCommonjsModule(function (module, exports) {
 
@@ -10932,19 +9508,19 @@ var combinator = -3;
 exports.combinator = combinator;
 });
 
-unwrapExports(tokenTypes);
-
 var tokenize_1 = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = tokenize;
+exports["default"] = tokenize;
 exports.FIELDS = void 0;
 
 var t = _interopRequireWildcard(tokenTypes);
 
 var _unescapable, _wordDelimiters;
 
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function _getRequireWildcardCache() { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { "default": obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj["default"] = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
 var unescapable = (_unescapable = {}, _unescapable[t.tab] = true, _unescapable[t.newline] = true, _unescapable[t.cr] = true, _unescapable[t.feed] = true, _unescapable);
 var wordDelimiters = (_wordDelimiters = {}, _wordDelimiters[t.space] = true, _wordDelimiters[t.tab] = true, _wordDelimiters[t.newline] = true, _wordDelimiters[t.cr] = true, _wordDelimiters[t.feed] = true, _wordDelimiters[t.ampersand] = true, _wordDelimiters[t.asterisk] = true, _wordDelimiters[t.bang] = true, _wordDelimiters[t.comma] = true, _wordDelimiters[t.colon] = true, _wordDelimiters[t.semicolon] = true, _wordDelimiters[t.openParenthesis] = true, _wordDelimiters[t.closeParenthesis] = true, _wordDelimiters[t.openSquare] = true, _wordDelimiters[t.closeSquare] = true, _wordDelimiters[t.singleQuote] = true, _wordDelimiters[t.doubleQuote] = true, _wordDelimiters[t.plus] = true, _wordDelimiters[t.pipe] = true, _wordDelimiters[t.tilde] = true, _wordDelimiters[t.greaterThan] = true, _wordDelimiters[t.equals] = true, _wordDelimiters[t.dollar] = true, _wordDelimiters[t.caret] = true, _wordDelimiters[t.slash] = true, _wordDelimiters);
@@ -11189,7 +9765,8 @@ function tokenize(input) {
     endLine, // [3] Ending line
     endColumn, // [4] Ending column
     start, // [5] Start position / Source index
-    end]); // Reset offset for the next token
+    end // [6] End position
+    ]); // Reset offset for the next token
 
     if (nextOffset) {
       offset = nextOffset;
@@ -11203,16 +9780,10 @@ function tokenize(input) {
 }
 });
 
-unwrapExports(tokenize_1);
-
 var parser = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
-
-var _indexesOf = _interopRequireDefault(indexesOf);
-
-var _uniq = _interopRequireDefault(uniq);
+exports["default"] = void 0;
 
 var _root = _interopRequireDefault(root);
 
@@ -11244,15 +9815,17 @@ var _tokenize = _interopRequireWildcard(tokenize_1);
 
 var tokens = _interopRequireWildcard(tokenTypes);
 
-var types$$1 = _interopRequireWildcard(types);
+var types$1 = _interopRequireWildcard(types);
 
 
 
 var _WHITESPACE_TOKENS, _Object$assign;
 
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function _getRequireWildcardCache() { return cache; }; return cache; }
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { "default": obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj["default"] = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
 
@@ -11308,8 +9881,8 @@ function unescapeProp(node, prop) {
   }
 
   if (value.indexOf("\\") !== -1) {
-    (0, util$1.ensureObject)(node, 'raws');
-    node[prop] = (0, util$1.unesc)(value);
+    (0, util.ensureObject)(node, 'raws');
+    node[prop] = (0, util.unesc)(value);
 
     if (node.raws[prop] === undefined) {
       node.raws[prop] = value;
@@ -11319,9 +9892,25 @@ function unescapeProp(node, prop) {
   return node;
 }
 
-var Parser =
-/*#__PURE__*/
-function () {
+function indexesOf(array, item) {
+  var i = -1;
+  var indexes = [];
+
+  while ((i = array.indexOf(item, i + 1)) !== -1) {
+    indexes.push(i);
+  }
+
+  return indexes;
+}
+
+function uniqs() {
+  var list = Array.prototype.concat.apply([], arguments);
+  return list.filter(function (item, i) {
+    return i === list.indexOf(item);
+  });
+}
+
+var Parser = /*#__PURE__*/function () {
   function Parser(rule, options) {
     if (options === void 0) {
       options = {};
@@ -11334,17 +9923,17 @@ function () {
     }, options);
     this.position = 0;
     this.css = typeof this.rule === 'string' ? this.rule : this.rule.selector;
-    this.tokens = (0, _tokenize.default)({
+    this.tokens = (0, _tokenize["default"])({
       css: this.css,
       error: this._errorGenerator(),
       safe: this.options.safe
     });
     var rootSource = getTokenSourceSpan(this.tokens[0], this.tokens[this.tokens.length - 1]);
-    this.root = new _root.default({
+    this.root = new _root["default"]({
       source: rootSource
     });
     this.root.errorGenerator = this._errorGenerator();
-    var selector$$1 = new _selector.default({
+    var selector = new _selector["default"]({
       source: {
         start: {
           line: 1,
@@ -11352,8 +9941,8 @@ function () {
         }
       }
     });
-    this.root.append(selector$$1);
-    this.current = selector$$1;
+    this.root.append(selector);
+    this.current = selector;
     this.loop();
   }
 
@@ -11371,7 +9960,7 @@ function () {
     };
   };
 
-  _proto.attribute = function attribute$$1() {
+  _proto.attribute = function attribute() {
     var attr = [];
     var startingToken = this.currToken;
     this.position++;
@@ -11421,10 +10010,10 @@ function () {
           }
 
           if (lastAdded) {
-            (0, util$1.ensureObject)(node, 'spaces', lastAdded);
+            (0, util.ensureObject)(node, 'spaces', lastAdded);
             var prevContent = node.spaces[lastAdded].after || '';
             node.spaces[lastAdded].after = prevContent + content;
-            var existingComment = (0, util$1.getProp)(node, 'raws', 'spaces', lastAdded, 'after') || null;
+            var existingComment = (0, util.getProp)(node, 'raws', 'spaces', lastAdded, 'after') || null;
 
             if (existingComment) {
               node.raws.spaces[lastAdded].after = existingComment + content;
@@ -11442,19 +10031,19 @@ function () {
             lastAdded = 'operator';
           } else if ((!node.namespace || lastAdded === "namespace" && !spaceAfterMeaningfulToken) && next) {
             if (spaceBefore) {
-              (0, util$1.ensureObject)(node, 'spaces', 'attribute');
+              (0, util.ensureObject)(node, 'spaces', 'attribute');
               node.spaces.attribute.before = spaceBefore;
               spaceBefore = '';
             }
 
             if (commentBefore) {
-              (0, util$1.ensureObject)(node, 'raws', 'spaces', 'attribute');
+              (0, util.ensureObject)(node, 'raws', 'spaces', 'attribute');
               node.raws.spaces.attribute.before = spaceBefore;
               commentBefore = '';
             }
 
             node.namespace = (node.namespace || "") + content;
-            var rawValue = (0, util$1.getProp)(node, 'raws', 'namespace') || null;
+            var rawValue = (0, util.getProp)(node, 'raws', 'namespace') || null;
 
             if (rawValue) {
               node.raws.namespace += content;
@@ -11468,7 +10057,7 @@ function () {
 
         case tokens.dollar:
           if (lastAdded === "value") {
-            var oldRawValue = (0, util$1.getProp)(node, 'raws', 'value');
+            var oldRawValue = (0, util.getProp)(node, 'raws', 'value');
             node.value += "$";
 
             if (oldRawValue) {
@@ -11517,20 +10106,20 @@ function () {
             lastAdded = 'namespace';
           } else if (!node.attribute || lastAdded === "attribute" && !spaceAfterMeaningfulToken) {
             if (spaceBefore) {
-              (0, util$1.ensureObject)(node, 'spaces', 'attribute');
+              (0, util.ensureObject)(node, 'spaces', 'attribute');
               node.spaces.attribute.before = spaceBefore;
               spaceBefore = '';
             }
 
             if (commentBefore) {
-              (0, util$1.ensureObject)(node, 'raws', 'spaces', 'attribute');
+              (0, util.ensureObject)(node, 'raws', 'spaces', 'attribute');
               node.raws.spaces.attribute.before = commentBefore;
               commentBefore = '';
             }
 
             node.attribute = (node.attribute || "") + content;
 
-            var _rawValue = (0, util$1.getProp)(node, 'raws', 'attribute') || null;
+            var _rawValue = (0, util.getProp)(node, 'raws', 'attribute') || null;
 
             if (_rawValue) {
               node.raws.attribute += content;
@@ -11538,16 +10127,16 @@ function () {
 
             lastAdded = 'attribute';
           } else if (!node.value && node.value !== "" || lastAdded === "value" && !spaceAfterMeaningfulToken) {
-            var _unescaped = (0, util$1.unesc)(content);
+            var _unescaped = (0, util.unesc)(content);
 
-            var _oldRawValue = (0, util$1.getProp)(node, 'raws', 'value') || '';
+            var _oldRawValue = (0, util.getProp)(node, 'raws', 'value') || '';
 
             var oldValue = node.value || '';
             node.value = oldValue + _unescaped;
             node.quoteMark = null;
 
             if (_unescaped !== content || _oldRawValue) {
-              (0, util$1.ensureObject)(node, 'raws');
+              (0, util.ensureObject)(node, 'raws');
               node.raws.value = (_oldRawValue || oldValue) + content;
             }
 
@@ -11559,20 +10148,20 @@ function () {
               node.insensitive = insensitive;
 
               if (!insensitive || content === "I") {
-                (0, util$1.ensureObject)(node, 'raws');
+                (0, util.ensureObject)(node, 'raws');
                 node.raws.insensitiveFlag = content;
               }
 
               lastAdded = 'insensitive';
 
               if (spaceBefore) {
-                (0, util$1.ensureObject)(node, 'spaces', 'insensitive');
+                (0, util.ensureObject)(node, 'spaces', 'insensitive');
                 node.spaces.insensitive.before = spaceBefore;
                 spaceBefore = '';
               }
 
               if (commentBefore) {
-                (0, util$1.ensureObject)(node, 'raws', 'spaces', 'insensitive');
+                (0, util.ensureObject)(node, 'raws', 'spaces', 'insensitive');
                 node.raws.spaces.insensitive.before = commentBefore;
                 commentBefore = '';
               }
@@ -11603,7 +10192,7 @@ function () {
           node.value = unescaped;
           node.quoteMark = quoteMark;
           lastAdded = 'value';
-          (0, util$1.ensureObject)(node, 'raws');
+          (0, util.ensureObject)(node, 'raws');
           node.raws.value = content;
           spaceAfterMeaningfulToken = false;
           break;
@@ -11627,14 +10216,14 @@ function () {
         case tokens.comment:
           if (lastAdded) {
             if (spaceAfterMeaningfulToken || next && next[_tokenize.FIELDS.TYPE] === tokens.space || lastAdded === 'insensitive') {
-              var lastComment = (0, util$1.getProp)(node, 'spaces', lastAdded, 'after') || '';
-              var rawLastComment = (0, util$1.getProp)(node, 'raws', 'spaces', lastAdded, 'after') || lastComment;
-              (0, util$1.ensureObject)(node, 'raws', 'spaces', lastAdded);
+              var lastComment = (0, util.getProp)(node, 'spaces', lastAdded, 'after') || '';
+              var rawLastComment = (0, util.getProp)(node, 'raws', 'spaces', lastAdded, 'after') || lastComment;
+              (0, util.ensureObject)(node, 'raws', 'spaces', lastAdded);
               node.raws.spaces[lastAdded].after = rawLastComment + content;
             } else {
               var lastValue = node[lastAdded] || '';
-              var rawLastValue = (0, util$1.getProp)(node, 'raws', lastAdded) || lastValue;
-              (0, util$1.ensureObject)(node, 'raws');
+              var rawLastValue = (0, util.getProp)(node, 'raws', lastAdded) || lastValue;
+              (0, util.ensureObject)(node, 'raws');
               node.raws[lastAdded] = rawLastValue + content;
             }
           } else {
@@ -11654,7 +10243,7 @@ function () {
 
     unescapeProp(node, "attribute");
     unescapeProp(node, "namespace");
-    this.newNode(new _attribute.default(node));
+    this.newNode(new _attribute["default"](node));
     this.position++;
   }
   /**
@@ -11694,7 +10283,7 @@ function () {
           space = "";
         }
 
-        lastComment = new _comment.default({
+        lastComment = new _comment["default"]({
           value: this.content(),
           source: getTokenSource(this.currToken),
           sourceIndex: this.currToken[_tokenize.FIELDS.START_POS],
@@ -11710,7 +10299,7 @@ function () {
       } else if (!this.options.lossy) {
         var firstToken = this.tokens[startPosition];
         var lastToken = this.tokens[this.position - 1];
-        nodes.push(new _string.default({
+        nodes.push(new _string["default"]({
           value: '',
           source: getSource(firstToken[_tokenize.FIELDS.START_LINE], firstToken[_tokenize.FIELDS.START_COL], lastToken[_tokenize.FIELDS.END_LINE], lastToken[_tokenize.FIELDS.END_COL]),
           sourceIndex: firstToken[_tokenize.FIELDS.START_POS],
@@ -11770,14 +10359,14 @@ function () {
   _proto.namedCombinator = function namedCombinator() {
     if (this.isNamedCombinator()) {
       var nameRaw = this.content(this.tokens[this.position + 1]);
-      var name = (0, util$1.unesc)(nameRaw).toLowerCase();
+      var name = (0, util.unesc)(nameRaw).toLowerCase();
       var raws = {};
 
       if (name !== nameRaw) {
         raws.value = "/" + nameRaw + "/";
       }
 
-      var node = new _combinator.default({
+      var node = new _combinator["default"]({
         value: "/" + name + "/",
         source: getSource(this.currToken[_tokenize.FIELDS.START_LINE], this.currToken[_tokenize.FIELDS.START_COL], this.tokens[this.position + 2][_tokenize.FIELDS.END_LINE], this.tokens[this.position + 2][_tokenize.FIELDS.END_COL]),
         sourceIndex: this.currToken[_tokenize.FIELDS.START_POS],
@@ -11790,7 +10379,7 @@ function () {
     }
   };
 
-  _proto.combinator = function combinator$$1() {
+  _proto.combinator = function combinator() {
     var _this3 = this;
 
     if (this.content() === '|') {
@@ -11838,7 +10427,7 @@ function () {
     if (this.isNamedCombinator()) {
       node = this.namedCombinator();
     } else if (this.currToken[_tokenize.FIELDS.TYPE] === tokens.combinator) {
-      node = new _combinator.default({
+      node = new _combinator["default"]({
         value: this.content(),
         source: getTokenSource(this.currToken),
         sourceIndex: this.currToken[_tokenize.FIELDS.START_POS]
@@ -11882,7 +10471,7 @@ function () {
         raws.value = _rawSpace2;
       }
 
-      node = new _combinator.default({
+      node = new _combinator["default"]({
         value: ' ',
         source: getTokenSourceSpan(firstToken, this.tokens[this.position - 1]),
         sourceIndex: firstToken[_tokenize.FIELDS.START_POS],
@@ -11908,19 +10497,19 @@ function () {
 
     this.current._inferEndPosition();
 
-    var selector$$1 = new _selector.default({
+    var selector = new _selector["default"]({
       source: {
         start: tokenStart(this.tokens[this.position + 1])
       }
     });
-    this.current.parent.append(selector$$1);
-    this.current = selector$$1;
+    this.current.parent.append(selector);
+    this.current = selector;
     this.position++;
   };
 
-  _proto.comment = function comment$$1() {
+  _proto.comment = function comment() {
     var current = this.currToken;
-    this.newNode(new _comment.default({
+    this.newNode(new _comment["default"]({
       value: this.content(),
       source: getTokenSource(current),
       sourceIndex: current[_tokenize.FIELDS.START_POS]
@@ -11962,7 +10551,7 @@ function () {
     }
   };
 
-  _proto.nesting = function nesting$$1() {
+  _proto.nesting = function nesting() {
     if (this.nextToken) {
       var nextContent = this.content(this.nextToken);
 
@@ -11973,7 +10562,7 @@ function () {
     }
 
     var current = this.currToken;
-    this.newNode(new _nesting.default({
+    this.newNode(new _nesting["default"]({
       value: this.content(),
       source: getTokenSource(current),
       sourceIndex: current[_tokenize.FIELDS.START_POS]
@@ -11986,15 +10575,15 @@ function () {
     var unbalanced = 1;
     this.position++;
 
-    if (last && last.type === types$$1.PSEUDO) {
-      var selector$$1 = new _selector.default({
+    if (last && last.type === types$1.PSEUDO) {
+      var selector = new _selector["default"]({
         source: {
           start: tokenStart(this.tokens[this.position - 1])
         }
       });
       var cache = this.current;
-      last.append(selector$$1);
-      this.current = selector$$1;
+      last.append(selector);
+      this.current = selector;
 
       while (this.position < this.tokens.length && unbalanced) {
         if (this.currToken[_tokenize.FIELDS.TYPE] === tokens.openParenthesis) {
@@ -12039,7 +10628,7 @@ function () {
       if (last) {
         last.appendToPropertyAndEscape("value", parenValue, parenValue);
       } else {
-        this.newNode(new _string.default({
+        this.newNode(new _string["default"]({
           value: parenValue,
           source: getSource(parenStart[_tokenize.FIELDS.START_LINE], parenStart[_tokenize.FIELDS.START_COL], parenEnd[_tokenize.FIELDS.END_LINE], parenEnd[_tokenize.FIELDS.END_COL]),
           sourceIndex: parenStart[_tokenize.FIELDS.START_POS]
@@ -12052,7 +10641,7 @@ function () {
     }
   };
 
-  _proto.pseudo = function pseudo$$1() {
+  _proto.pseudo = function pseudo() {
     var _this4 = this;
 
     var pseudoStr = '';
@@ -12071,7 +10660,7 @@ function () {
       this.splitWord(false, function (first, length) {
         pseudoStr += first;
 
-        _this4.newNode(new _pseudo.default({
+        _this4.newNode(new _pseudo["default"]({
           value: pseudoStr,
           source: getTokenSourceSpan(startingToken, _this4.currToken),
           sourceIndex: startingToken[_tokenize.FIELDS.START_POS]
@@ -12091,7 +10680,9 @@ function () {
   _proto.space = function space() {
     var content = this.content(); // Handle space before and after the selector
 
-    if (this.position === 0 || this.prevToken[_tokenize.FIELDS.TYPE] === tokens.comma || this.prevToken[_tokenize.FIELDS.TYPE] === tokens.openParenthesis) {
+    if (this.position === 0 || this.prevToken[_tokenize.FIELDS.TYPE] === tokens.comma || this.prevToken[_tokenize.FIELDS.TYPE] === tokens.openParenthesis || this.current.nodes.every(function (node) {
+      return node.type === 'comment';
+    })) {
       this.spaces = this.optionalSpace(content);
       this.position++;
     } else if (this.position === this.tokens.length - 1 || this.nextToken[_tokenize.FIELDS.TYPE] === tokens.comma || this.nextToken[_tokenize.FIELDS.TYPE] === tokens.closeParenthesis) {
@@ -12102,9 +10693,9 @@ function () {
     }
   };
 
-  _proto.string = function string$$1() {
+  _proto.string = function string() {
     var current = this.currToken;
-    this.newNode(new _string.default({
+    this.newNode(new _string["default"]({
       value: this.content(),
       source: getTokenSource(current),
       sourceIndex: current[_tokenize.FIELDS.START_POS]
@@ -12112,7 +10703,7 @@ function () {
     this.position++;
   };
 
-  _proto.universal = function universal$$1(namespace) {
+  _proto.universal = function universal(namespace) {
     var nextToken = this.nextToken;
 
     if (nextToken && this.content(nextToken) === '|') {
@@ -12121,7 +10712,7 @@ function () {
     }
 
     var current = this.currToken;
-    this.newNode(new _universal.default({
+    this.newNode(new _universal["default"]({
       value: this.content(),
       source: getTokenSource(current),
       sourceIndex: current[_tokenize.FIELDS.START_POS]
@@ -12152,14 +10743,18 @@ function () {
       nextToken = this.nextToken;
     }
 
-    var hasClass = (0, _indexesOf.default)(word, '.').filter(function (i) {
-      return word[i - 1] !== '\\';
+    var hasClass = indexesOf(word, '.').filter(function (i) {
+      // Allow escaped dot within class name
+      var escapedDot = word[i - 1] === '\\'; // Allow decimal numbers percent in @keyframes
+
+      var isKeyframesPercent = /^\d+\.\d+%$/.test(word);
+      return !escapedDot && !isKeyframesPercent;
     });
-    var hasId = (0, _indexesOf.default)(word, '#').filter(function (i) {
+    var hasId = indexesOf(word, '#').filter(function (i) {
       return word[i - 1] !== '\\';
     }); // Eliminate Sass interpolations from the list of id indexes
 
-    var interpolations = (0, _indexesOf.default)(word, '#{');
+    var interpolations = indexesOf(word, '#{');
 
     if (interpolations.length) {
       hasId = hasId.filter(function (hashIndex) {
@@ -12167,7 +10762,7 @@ function () {
       });
     }
 
-    var indices = (0, _sortAscending.default)((0, _uniq.default)([0].concat(hasClass, hasId)));
+    var indices = (0, _sortAscending["default"])(uniqs([0].concat(hasClass, hasId)));
     indices.forEach(function (ind, i) {
       var index = indices[i + 1] || word.length;
       var value = word.slice(ind, index);
@@ -12187,14 +10782,14 @@ function () {
           source: source,
           sourceIndex: sourceIndex
         };
-        node = new _className.default(unescapeProp(classNameOpts, "value"));
+        node = new _className["default"](unescapeProp(classNameOpts, "value"));
       } else if (~hasId.indexOf(ind)) {
         var idOpts = {
           value: value.slice(1),
           source: source,
           sourceIndex: sourceIndex
         };
-        node = new _id.default(unescapeProp(idOpts, "value"));
+        node = new _id["default"](unescapeProp(idOpts, "value"));
       } else {
         var tagOpts = {
           value: value,
@@ -12202,7 +10797,7 @@ function () {
           sourceIndex: sourceIndex
         };
         unescapeProp(tagOpts, "value");
-        node = new _tag.default(tagOpts);
+        node = new _tag["default"](tagOpts);
       }
 
       _this5.newNode(node, namespace); // Ensure that the namespace is used only once
@@ -12407,17 +11002,17 @@ function () {
 
   _createClass(Parser, [{
     key: "currToken",
-    get: function get$$1() {
+    get: function get() {
       return this.tokens[this.position];
     }
   }, {
     key: "nextToken",
-    get: function get$$1() {
+    get: function get() {
       return this.tokens[this.position + 1];
     }
   }, {
     key: "prevToken",
-    get: function get$$1() {
+    get: function get() {
       return this.tokens[this.position - 1];
     }
   }]);
@@ -12425,24 +11020,20 @@ function () {
   return Parser;
 }();
 
-exports.default = Parser;
+exports["default"] = Parser;
 module.exports = exports.default;
 });
-
-unwrapExports(parser);
 
 var processor = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _parser = _interopRequireDefault(parser);
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-var Processor =
-/*#__PURE__*/
-function () {
+var Processor = /*#__PURE__*/function () {
   function Processor(func, options) {
     this.func = func || function noop() {};
 
@@ -12485,8 +11076,8 @@ function () {
       options = {};
     }
 
-    var parser$$1 = new _parser.default(rule, this._parseOptions(options));
-    return parser$$1.root;
+    var parser = new _parser["default"](rule, this._parseOptions(options));
+    return parser.root;
   };
 
   _proto._parseOptions = function _parseOptions(options) {
@@ -12637,11 +11228,9 @@ function () {
   return Processor;
 }();
 
-exports.default = Processor;
+exports["default"] = Processor;
 module.exports = exports.default;
 });
-
-unwrapExports(processor);
 
 var constructors = createCommonjsModule(function (module, exports) {
 
@@ -12672,82 +11261,80 @@ var _tag = _interopRequireDefault(tag);
 
 var _universal = _interopRequireDefault(universal);
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-var attribute$$1 = function attribute$$1(opts) {
-  return new _attribute.default(opts);
+var attribute$1 = function attribute(opts) {
+  return new _attribute["default"](opts);
 };
 
-exports.attribute = attribute$$1;
+exports.attribute = attribute$1;
 
-var className$$1 = function className$$1(opts) {
-  return new _className.default(opts);
+var className$1 = function className(opts) {
+  return new _className["default"](opts);
 };
 
-exports.className = className$$1;
+exports.className = className$1;
 
-var combinator$$1 = function combinator$$1(opts) {
-  return new _combinator.default(opts);
+var combinator$1 = function combinator(opts) {
+  return new _combinator["default"](opts);
 };
 
-exports.combinator = combinator$$1;
+exports.combinator = combinator$1;
 
-var comment$$1 = function comment$$1(opts) {
-  return new _comment.default(opts);
+var comment$1 = function comment(opts) {
+  return new _comment["default"](opts);
 };
 
-exports.comment = comment$$1;
+exports.comment = comment$1;
 
-var id$$1 = function id$$1(opts) {
-  return new _id.default(opts);
+var id$1 = function id(opts) {
+  return new _id["default"](opts);
 };
 
-exports.id = id$$1;
+exports.id = id$1;
 
-var nesting$$1 = function nesting$$1(opts) {
-  return new _nesting.default(opts);
+var nesting$1 = function nesting(opts) {
+  return new _nesting["default"](opts);
 };
 
-exports.nesting = nesting$$1;
+exports.nesting = nesting$1;
 
-var pseudo$$1 = function pseudo$$1(opts) {
-  return new _pseudo.default(opts);
+var pseudo$1 = function pseudo(opts) {
+  return new _pseudo["default"](opts);
 };
 
-exports.pseudo = pseudo$$1;
+exports.pseudo = pseudo$1;
 
-var root$$1 = function root$$1(opts) {
-  return new _root.default(opts);
+var root$1 = function root(opts) {
+  return new _root["default"](opts);
 };
 
-exports.root = root$$1;
+exports.root = root$1;
 
-var selector$$1 = function selector$$1(opts) {
-  return new _selector.default(opts);
+var selector$1 = function selector(opts) {
+  return new _selector["default"](opts);
 };
 
-exports.selector = selector$$1;
+exports.selector = selector$1;
 
-var string$$1 = function string$$1(opts) {
-  return new _string.default(opts);
+var string$1 = function string(opts) {
+  return new _string["default"](opts);
 };
 
-exports.string = string$$1;
+exports.string = string$1;
 
-var tag$$1 = function tag$$1(opts) {
-  return new _tag.default(opts);
+var tag$1 = function tag(opts) {
+  return new _tag["default"](opts);
 };
 
-exports.tag = tag$$1;
+exports.tag = tag$1;
 
-var universal$$1 = function universal$$1(opts) {
-  return new _universal.default(opts);
+var universal$1 = function universal(opts) {
+  return new _universal["default"](opts);
 };
 
-exports.universal = universal$$1;
+exports.universal = universal$1;
 });
-
-unwrapExports(constructors);
 
 var guards = createCommonjsModule(function (module, exports) {
 
@@ -12799,7 +11386,7 @@ var isUniversal = isNodeType.bind(null, types.UNIVERSAL);
 exports.isUniversal = isUniversal;
 
 function isPseudoElement(node) {
-  return isPseudo(node) && node.value && (node.value.startsWith("::") || node.value === ":before" || node.value === ":after");
+  return isPseudo(node) && node.value && (node.value.startsWith("::") || node.value.toLowerCase() === ":before" || node.value.toLowerCase() === ":after" || node.value.toLowerCase() === ":first-letter" || node.value.toLowerCase() === ":first-line");
 }
 
 function isPseudoClass(node) {
@@ -12815,8 +11402,6 @@ function isNamespace(node) {
 }
 });
 
-unwrapExports(guards);
-
 var selectors = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
@@ -12825,6 +11410,7 @@ exports.__esModule = true;
 
 Object.keys(types).forEach(function (key) {
   if (key === "default" || key === "__esModule") return;
+  if (key in exports && exports[key] === types[key]) return;
   exports[key] = types[key];
 });
 
@@ -12832,6 +11418,7 @@ Object.keys(types).forEach(function (key) {
 
 Object.keys(constructors).forEach(function (key) {
   if (key === "default" || key === "__esModule") return;
+  if (key in exports && exports[key] === constructors[key]) return;
   exports[key] = constructors[key];
 });
 
@@ -12839,42 +11426,112 @@ Object.keys(constructors).forEach(function (key) {
 
 Object.keys(guards).forEach(function (key) {
   if (key === "default" || key === "__esModule") return;
+  if (key in exports && exports[key] === guards[key]) return;
   exports[key] = guards[key];
 });
 });
 
-unwrapExports(selectors);
-
 var dist = createCommonjsModule(function (module, exports) {
 
 exports.__esModule = true;
-exports.default = void 0;
+exports["default"] = void 0;
 
 var _processor = _interopRequireDefault(processor);
 
-var selectors$$1 = _interopRequireWildcard(selectors);
+var selectors$1 = _interopRequireWildcard(selectors);
 
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function _getRequireWildcardCache() { return cache; }; return cache; }
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { "default": obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj["default"] = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
-var parser = function parser(processor$$1) {
-  return new _processor.default(processor$$1);
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
+
+var parser = function parser(processor) {
+  return new _processor["default"](processor);
 };
 
-Object.assign(parser, selectors$$1);
+Object.assign(parser, selectors$1);
 delete parser.__esModule;
 var _default = parser;
-exports.default = _default;
+exports["default"] = _default;
 module.exports = exports.default;
 });
 
-var selectorParser = unwrapExports(dist);
+var selectorParser = /*@__PURE__*/getDefaultExportFromCjs(dist);
 
-/* eslint-disable prefer-const, prefer-object-spread, @typescript-eslint/restrict-plus-operands */
+const matchPlugin = (rules, options, {
+  layer,
+  context,
+  prefixIdentifier
+}) => {
+  const defaultOptions = {
+    respectPrefix: true,
+    respectImportant: layer === 'utilities'
+  };
+  options = _extends({}, defaultOptions, options);
+
+  for (const [identifier] of Object.entries(rules)) {
+    const prefixedIdentifier = prefixIdentifier(identifier, options);
+    const rule = rules[identifier]; // eslint-disable-next-line no-inner-declarations
+
+    function wrapped() {
+      const value = [];
+
+      for (const configValue of Object.values(options.values)) {
+        const result = toArray(rule(configValue)).map(val => ({
+          [['.', prefixedIdentifier, '-', configValue].join('')]: // eslint-disable-next-line unicorn/prefer-object-from-entries
+          Object.entries(val).reduce((result, [prop, value]) => _extends({}, result, {
+            [typeof value === 'string' ? formatCssProperty(prop) : prop]: value
+          }), {})
+        }));
+        value.push(deepMerge__default["default"]({}, ...result));
+      }
+
+      if (value === undefined) return {};
+      return deepMerge__default["default"]({}, ...value);
+    }
+
+    const withOffsets = [{
+      layer,
+      options
+    }, wrapped];
+
+    if (!context.candidateRuleMap.has(prefixedIdentifier)) {
+      context.candidateRuleMap.set(prefixedIdentifier, []);
+    }
+
+    context.candidateRuleMap.get(prefixedIdentifier).push(withOffsets);
+  }
+};
+
+const asPlugin = (rules, options, {
+  layer,
+  context,
+  prefixIdentifier
+}) => {
+  const defaultOptions = {
+    respectPrefix: true,
+    respectImportant: layer === 'utilities'
+  };
+  options = Object.assign({}, defaultOptions, Array.isArray(options) ? {} : options);
+
+  for (const [identifier, rule] of withIdentifiers(rules)) {
+    const prefixedIdentifier = prefixIdentifier(identifier, options);
+
+    if (!context.candidateRuleMap.has(prefixedIdentifier)) {
+      context.candidateRuleMap.set(prefixedIdentifier, []);
+    }
+
+    context.candidateRuleMap.get(prefixedIdentifier).push([{
+      layer,
+      options
+    }, rule]);
+  }
+};
+
 function buildPluginApi(tailwindConfig, context) {
-  function getConfigValue(path$$1, defaultValue) {
-    return path$$1 ? dlv(tailwindConfig, path$$1, defaultValue) : tailwindConfig;
+  function getConfigValue(path, defaultValue) {
+    return path ? dlv(tailwindConfig, path, defaultValue) : tailwindConfig;
   }
 
   function prefixIdentifier(identifier, options) {
@@ -12889,45 +11546,45 @@ function buildPluginApi(tailwindConfig, context) {
     return context.tailwindConfig.prefix + identifier;
   }
 
+  const {
+    allowUnsupportedPlugins
+  } = context.configTwin;
   return {
-    addVariant: function addVariant() {
-      // Unavailable in twin
+    addVariant() {
+      throwIf(!allowUnsupportedPlugins, () => getUnsupportedError('addVariant()'));
       return null;
     },
 
-    postcss: postcss,
-    prefix: function (prefix) { return prefix; },
+    postcss: postcss__default["default"],
+    prefix: prefix => prefix,
     // Customised
-    e: function (className) { return className.replace(/\./g, '\\.'); },
+    e: className => className.replace(/\./g, '\\.'),
     config: getConfigValue,
 
-    theme: function theme(path$$1, defaultValue) {
-      var ref = toPath.toPath(path$$1);
-      var pathRoot = ref[0];
-      var subPaths = ref.slice(1);
-      var value = getConfigValue(['theme', pathRoot ].concat( subPaths), defaultValue);
-      return transformThemeValue(pathRoot)(value);
+    theme(path, defaultValue) {
+      const [pathRoot, ...subPaths] = toPath.toPath(path);
+      const value = getConfigValue(['theme', pathRoot, ...subPaths], defaultValue);
+      return transformThemeValue__default["default"](pathRoot)(value);
     },
 
-    corePlugins: function () { return null; },
-    // Unavailable in twin
-    variants: function () {
+    corePlugins() {
+      throwIf(!allowUnsupportedPlugins, () => getUnsupportedError('corePlugins()'));
+      return null;
+    },
+
+    variants() {
       // Preserved for backwards compatibility but not used in v3.0+
       return [];
     },
 
-    addUserCss: function addUserCss() {
-      // Unavailable in twin
+    addUserCss() {
+      throwIf(!allowUnsupportedPlugins, () => getUnsupportedError('addUserCss()'));
       return null;
     },
 
-    addBase: function addBase(base) {
-      for (var i = 0, list = withIdentifiers(base); i < list.length; i += 1) {
-        var ref = list[i];
-        var identifier = ref[0];
-        var rule = ref[1];
-
-        var prefixedIdentifier = prefixIdentifier(identifier, {});
+    addBase(base) {
+      for (const [identifier, rule] of withIdentifiers(base)) {
+        const prefixedIdentifier = prefixIdentifier(identifier, {});
 
         if (!context.candidateRuleMap.has(prefixedIdentifier)) {
           context.candidateRuleMap.set(prefixedIdentifier, []);
@@ -12939,78 +11596,44 @@ function buildPluginApi(tailwindConfig, context) {
       }
     },
 
-    addDefaults: function addDefaults() {
-      // Unavailable in twin
+    addDefaults() {
+      throwIf(!allowUnsupportedPlugins, () => getUnsupportedError('addDefaults()'));
       return null;
     },
 
-    addComponents: function addComponents(components, options) {
-      var defaultOptions = {
-        respectPrefix: true,
-        respectImportant: false
-      };
-      options = Object.assign({}, defaultOptions, Array.isArray(options) ? {} : options);
-
-      for (var i = 0, list = withIdentifiers(components); i < list.length; i += 1) {
-        var ref = list[i];
-        var identifier = ref[0];
-        var rule = ref[1];
-
-        var prefixedIdentifier = prefixIdentifier(identifier, options);
-
-        if (!context.candidateRuleMap.has(prefixedIdentifier)) {
-          context.candidateRuleMap.set(prefixedIdentifier, []);
-        }
-
-        context.candidateRuleMap.get(prefixedIdentifier).push([{
-          layer: 'components',
-          options: options
-        }, rule]);
-      }
-    },
-
-    addUtilities: function addUtilities(utilities, options) {
-      var defaultOptions = {
-        respectPrefix: true,
-        respectImportant: true
-      };
-      options = Object.assign({}, defaultOptions, Array.isArray(options) ? {} : options);
-
-      for (var i = 0, list = withIdentifiers(utilities); i < list.length; i += 1) {
-        var ref = list[i];
-        var identifier = ref[0];
-        var rule = ref[1];
-
-        var prefixedIdentifier = prefixIdentifier(identifier, options);
-
-        if (!context.candidateRuleMap.has(prefixedIdentifier)) {
-          context.candidateRuleMap.set(prefixedIdentifier, []);
-        }
-
-        context.candidateRuleMap.get(prefixedIdentifier).push([{
-          layer: 'utilities',
-          options: options
-        }, rule]);
-      }
-    },
-
-    matchUtilities: function () { return null; },
-    // Unavailable in twin
-    matchComponents: function () { return null; } // Unavailable in twin
-
+    addComponents: (components, options) => asPlugin(components, options, {
+      layer: 'components',
+      prefixIdentifier,
+      context
+    }),
+    matchComponents: (components, options) => matchPlugin(components, options, {
+      layer: 'components',
+      prefixIdentifier,
+      context
+    }),
+    addUtilities: (utilities, options) => asPlugin(utilities, options, {
+      layer: 'utilities',
+      prefixIdentifier,
+      context
+    }),
+    matchUtilities: (utilities, options) => matchPlugin(utilities, options, {
+      layer: 'utilities',
+      prefixIdentifier,
+      context
+    })
   };
 }
 
 function withIdentifiers(styles) {
-  return parseStyles(styles).flatMap(function (node) {
-    var nodeMap = new Map();
-    var candidates = extractCandidates(node); // If this isn't "on-demandable", assign it a universal candidate.
+  return parseStyles(styles).flatMap(node => {
+    const nodeMap = new Map();
+    const candidates = extractCandidates(node); // If this isn't "on-demandable", assign it a universal candidate.
 
     if (candidates.length === 0) {
       return [['*', node]];
     }
 
-    return candidates.map(function (c) {
+    return candidates.map(c => {
       if (!nodeMap.has(node)) {
         nodeMap.set(node, node);
       }
@@ -13021,24 +11644,22 @@ function withIdentifiers(styles) {
 }
 
 function extractCandidates(node) {
-  var classes = [];
+  let classes = [];
 
   if (node.type === 'rule') {
-    for (var i = 0, list = node.selectors; i < list.length; i += 1) {
-      var selector = list[i];
+    for (const selector of node.selectors) {
+      const classCandidates = getClasses(selector); // At least one of the selectors contains non-"on-demandable" candidates.
 
-      var classCandidates = getClasses(selector); // At least one of the selectors contains non-"on-demandable" candidates.
-
-      if (classCandidates.length === 0) { return []; }
-      classes = classes.concat( classCandidates);
+      if (classCandidates.length === 0) return [];
+      classes = [...classes, ...classCandidates];
     }
 
     return classes;
   }
 
   if (node.type === 'atrule') {
-    node.walkRules(function (rule) {
-      classes = classes.concat( rule.selectors.flatMap(function (selector) { return getClasses(selector); }));
+    node.walkRules(rule => {
+      classes = [...classes, ...rule.selectors.flatMap(selector => getClasses(selector))];
     });
   }
 
@@ -13046,9 +11667,9 @@ function extractCandidates(node) {
 }
 
 function getClasses(selector) {
-  var parser = selectorParser(function (selectors) {
-    var allClasses = [];
-    selectors.walkClasses(function (classNode) {
+  const parser = selectorParser(selectors => {
+    const allClasses = [];
+    selectors.walkClasses(classNode => {
       allClasses.push(classNode.value);
     });
     return allClasses;
@@ -13061,171 +11682,174 @@ function parseStyles(styles) {
     return parseStyles([styles]);
   }
 
-  return styles.flatMap(function (style) {
-    var isNode = !Array.isArray(style) && !isPlainObject(style);
-    return isNode ? style : parseObjectStyles(style);
+  return styles.flatMap(style => {
+    const isNode = !Array.isArray(style) && !isPlainObject__default["default"](style);
+    return isNode ? style : parseObjectStyles__default["default"](style);
   });
 }
 
-var stripLeadingDot = function (string) { return string.startsWith('.') ? string.slice(1) : string; };
+const stripLeadingDot = string => string.startsWith('.') ? string.slice(1) : string;
 
-var replaceSelectorWithParent = function (string, replacement) { return string.replace(replacement, ("{{" + (stripLeadingDot(replacement)) + "}}")); };
+const replaceSelectorWithParent = (string, replacement) => string.replace(replacement, `{{${stripLeadingDot(replacement)}}}`);
 
-var parseSelector = function (selector) {
-  if (!selector) { return; }
-  var matches = selector.trim().match(/^(\S+)(\s+.*?)?$/);
-  if (matches === null) { return; }
-  var match = matches[0]; // Fix spacing that goes missing when provided by tailwindcss
+const parseSelector = selector => {
+  if (!selector) return;
+  const matches = selector.trim().match(/^(\S+)(\s+.*?)?$/);
+  if (matches === null) return;
+  let match = matches[0]; // Fix spacing that goes missing when provided by tailwindcss
   // Unfortunately this removes the ability to have classes on the same element
   // eg: .something.something or &.something
 
   match = match.replace(/(?<=\w)\./g, ' .'); // If the selector is just a single selector then return
 
-  if (!match.includes(' ')) { return match; } // Look for class matching candidates
+  if (!match.includes(' ')) return match; // Look for class matching candidates
 
-  var match2 = match.match(/(?<=>|^|~|\+|\*| )\.[\w.\\-]+(?= |>|~|\+|\*|:|$)/gm);
-  if (!match2) { return match; } // Wrap the matching classes in {{class}}
+  const match2 = match.match(/(?<=>|^|~|\+|\*| )\.[\w.\\-]+(?= |>|~|\+|\*|:|$)/gm);
+  if (!match2) return match; // Wrap the matching classes in {{class}}
 
-  for (var i = 0, list = match2; i < list.length; i += 1) {
-    var item = list[i];
-
+  for (const item of match2) {
     match = replaceSelectorWithParent(match, item);
   }
 
   return match;
 };
 
-var parseRuleProperty = function (string) {
-  // https://stackoverflow.com/questions/448981/which-characters-are-valid-in-css-class-names-selectors
-  if (string && string.match(/^-{2,3}[_a-z]+[\w-]*/i)) {
-    return string;
-  }
+const escapeSelector = selector => selector.replace(/\\\//g, '/').trim();
 
-  return camelize(string);
-};
-
-var escapeSelector = function (selector) { return selector.replace(/\\\//g, '/').trim(); };
-
-var buildAtSelector = function (name, values, screens) {
+const buildAtSelector = (name, values, screens) => {
   // Support @screen selectors
   if (name === 'screen') {
-    var screenValue = screens[values];
-    if (screenValue) { return ("@media (min-width: " + screenValue + ")"); }
+    const screenValue = screens[values];
+    if (screenValue) return `@media (min-width: ${screenValue})`;
   }
 
-  return ("@" + name + " " + values);
+  return `@${name} ${values}`;
 };
 
-var getBuiltRules = function (rule, ref) {
-  var obj;
+const getBuiltRules = (rule, {
+  isBase
+}) => {
+  if (!rule.selector) return null; // Prep comma spaced selectors for parsing
 
-  var isBase = ref.isBase;
-  if (!rule.selector) { return null; } // Prep comma spaced selectors for parsing
+  const selectorArray = rule.selector.split(','); // Validate each selector
 
-  var selectorArray = rule.selector.split(','); // Validate each selector
+  const selectorParsed = selectorArray.map(s => parseSelector(s)).filter(Boolean); // Join them back into a string
 
-  var selectorParsed = selectorArray.map(function (s) { return parseSelector(s); }).filter(Boolean); // Join them back into a string
+  const selector = selectorParsed.join(','); // Rule isn't formatted correctly
 
-  var selector = selectorParsed.join(','); // Rule isn't formatted correctly
-
-  if (!selector) { return null; }
+  if (!selector) return null;
 
   if (isBase) {
     // Base values stay as-is because they aren't interactive
-    return ( obj = {}, obj[escapeSelector(selector)] = buildDeclaration(rule.nodes), obj );
+    return {
+      [escapeSelector(selector)]: buildDeclaration(rule.nodes)
+    };
   } // Separate comma-separated selectors to allow twin's features
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
 
 
-  return selector.split(',').reduce(function (result, selector) {
-    var obj;
-
-    return (Object.assign({}, result,
-    ( obj = {}, obj[escapeSelector(selector)] = buildDeclaration(rule.nodes), obj )));
-  }, {});
+  return selector.split(',').reduce((result, selector) => _extends({}, result, {
+    [escapeSelector(selector)]: buildDeclaration(rule.nodes)
+  }), {});
 };
 
-var buildDeclaration = function (items) {
-  if (typeof items !== 'object') { return items; }
-  return Object.entries(items).reduce(function (result, ref) {
-    var obj;
+const buildDeclaration = items => {
+  if (typeof items !== 'object') return items; // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
 
-    var declaration = ref[1];
-    return (Object.assign({}, result,
-    ( obj = {}, obj[parseRuleProperty(declaration.prop)] = declaration.value, obj )));
-  }, {});
+  return Object.entries(items).reduce((result, [, declaration]) => _extends({}, result, {
+    [formatCssProperty(declaration.prop)]: declaration.value
+  }), {});
 };
 
-var ruleSorter = function (arr, screens) {
-  if (!Array.isArray(arr) || arr.length === 0) { return []; }
-  var screenOrder = screens ? Object.keys(screens) : [];
-  arr // Tailwind supplies the classes reversed since 2.0.x
-  .reverse() // Tailwind also messes up the ordering so classes need to be resorted
+const sortLength = (a, b) => {
+  const selectorA = a.selector ? a.selector.length : 0;
+  const selectorB = b.selector ? b.selector.length : 0;
+  return selectorA - selectorB;
+};
+
+const sortScreenOrder = (a, b, screenOrder) => {
+  const screenIndexA = a.name === 'screen' ? screenOrder.indexOf(a.params) : 0;
+  const screenIndexB = b.name === 'screen' ? screenOrder.indexOf(b.params) : 0;
+  return screenIndexA - screenIndexB;
+};
+
+const sortMediaRulesFirst = (a, b) => {
+  const atRuleA = a.type === 'atrule' ? 1 : 0;
+  const atRuleB = b.type === 'atrule' ? 1 : 0;
+  return atRuleA - atRuleB;
+};
+
+const ruleSorter = (arr, screens) => {
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  const screenOrder = screens ? Object.keys(screens) : [];
+  arr // Tailwind also messes up the ordering so classes need to be resorted
   // Order selectors by length (don't know of a better way)
-  .sort(function (a, b) {
-    var selectorA = a.selector ? a.selector.length : 0;
-    var selectorB = b.selector ? b.selector.length : 0;
-    return selectorA - selectorB;
-  }) // Place at rules at the end '@media' etc
-  .sort(function (a, b) {
-    var atRuleA = a.type === 'atrule';
-    var atRuleB = b.type === 'atrule';
-    return atRuleA - atRuleB;
-  }) // Sort @media by screens index
-  .sort(function (a, b) {
-    var screenIndexA = a.name === 'screen' ? screenOrder.indexOf(a.params) : 0;
-    var screenIndexB = b.name === 'screen' ? screenOrder.indexOf(b.params) : 0;
-    return screenIndexA - screenIndexB;
-  }) // Traverse children and reorder aswell
-  .forEach(function (item) {
-    if (!item.nodes || item.nodes.length === 0) { return; }
-    item.nodes.forEach(function (i) {
-      if (typeof i !== 'object') { return; }
+  .sort(sortLength) // Place at rules at the end '@media' etc
+  .sort(sortMediaRulesFirst) // Sort @media by screens index
+  .sort((a, b) => sortScreenOrder(a, b, screenOrder)) // Traverse children and reorder aswell
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/no-array-for-each
+  .forEach(item => {
+    if (!item.nodes || item.nodes.length === 0) return; // FIXME: Remove comment and fix next line
+    // eslint-disable-next-line unicorn/no-array-for-each
+
+    item.nodes.forEach(i => {
+      if (typeof i !== 'object') return;
       return ruleSorter(i, screens);
     });
   });
   return arr;
 };
 
-var getUserPluginRules = function (rules, screens, isBase) { return ruleSorter(rules, screens).reduce(function (result, rule) {
-  var obj;
+const getUserPluginRules = (rules, screens, isBase) => ruleSorter(rules, screens).reduce((result, rule) => {
+  if (typeof rule === 'function') {
+    return deepMerge__default["default"](result, rule());
+  }
 
   if (rule.type === 'decl') {
-    var builtRules = {};
-    builtRules[rule.prop] = rule.value;
-    return deepMerge(result, builtRules);
+    const builtRules = {
+      [rule.prop]: rule.value
+    };
+    return deepMerge__default["default"](result, builtRules);
   } // Build the media queries
 
 
   if (rule.type !== 'atrule') {
-    var builtRules$1 = getBuiltRules(rule, {
-      isBase: isBase
+    const builtRules = getBuiltRules(rule, {
+      isBase
     });
-    return deepMerge(result, builtRules$1);
+    return deepMerge__default["default"](result, builtRules);
   } // Remove a bunch of nodes that tailwind uses for limiting rule generation
   // https://github.com/tailwindlabs/tailwindcss/commit/b69e46cc1b32608d779dad35121077b48089485d#diff-808341f38c6f7093a7979961a53f5922R20
 
 
   if (['layer', 'variants', 'responsive'].includes(rule.name)) {
-    return deepMerge.apply(void 0, [ result ].concat( getUserPluginRules(rule.nodes, screens, isBase) ));
+    return deepMerge__default["default"](result, ...getUserPluginRules(rule.nodes, screens, isBase));
   }
 
-  var atSelector = buildAtSelector(rule.name, rule.params, screens);
-  return deepMerge(result, ( obj = {}, obj[atSelector] = getUserPluginRules(rule.nodes, screens, isBase), obj ));
-}, {}); };
+  const atSelector = buildAtSelector(rule.name, rule.params, screens);
+  return deepMerge__default["default"](result, {
+    [atSelector]: getUserPluginRules(rule.nodes, screens, isBase)
+  });
+}, {});
 
-var getUserPluginData = function (ref) {
-  var config = ref.config;
-
+const getUserPluginData = ({
+  config,
+  configTwin
+}) => {
   if (!config.plugins || config.plugins.length === 0) {
     return;
   }
 
-  var context = {
+  const context = {
     candidateRuleMap: new Map(),
-    tailwindConfig: config
+    tailwindConfig: config,
+    configTwin
   };
-  var pluginApi = buildPluginApi(config, context);
-  var userPlugins = config.plugins.map(function (plugin) {
+  const pluginApi = buildPluginApi(config, context);
+  const userPlugins = config.plugins.map(plugin => {
     if (plugin.__isOptionsFunction) {
       plugin = plugin();
     }
@@ -13233,13 +11857,9 @@ var getUserPluginData = function (ref) {
     return typeof plugin === 'function' ? plugin : plugin.handler;
   }); // Call each of the plugins with the pluginApi
 
-  for (var i$1 = 0, list$1 = userPlugins; i$1 < list$1.length; i$1 += 1) {
-    var plugin = list$1[i$1];
-
+  for (const plugin of userPlugins) {
     if (Array.isArray(plugin)) {
-      for (var i = 0, list = plugin; i < list.length; i += 1) {
-        var pluginItem = list[i];
-
+      for (const pluginItem of plugin) {
         pluginItem(pluginApi);
       }
     } else {
@@ -13247,19 +11867,13 @@ var getUserPluginData = function (ref) {
     }
   }
 
-  var rulesets = context.candidateRuleMap.values();
-  var baseRaw = [];
-  var componentsRaw = [];
-  var utilitiesRaw = []; // eslint-disable-next-line unicorn/prefer-spread
+  const rulesets = context.candidateRuleMap.values();
+  const baseRaw = [];
+  const componentsRaw = [];
+  const utilitiesRaw = []; // eslint-disable-next-line unicorn/prefer-spread
 
-  for (var i$3 = 0, list$3 = Array.from(rulesets); i$3 < list$3.length; i$3 += 1) {
-    var rules = list$3[i$3];
-
-    for (var i$2 = 0, list$2 = rules; i$2 < list$2.length; i$2 += 1) {
-      var ref$1 = list$2[i$2];
-      var data = ref$1[0];
-      var rule = ref$1[1];
-
+  for (const rules of Array.from(rulesets)) {
+    for (const [data, rule] of rules) {
       if (data.layer === 'base') {
         baseRaw.push(rule);
       }
@@ -13283,38 +11897,38 @@ var getUserPluginData = function (ref) {
    */
 
 
-  var base = getUserPluginRules(baseRaw, config.theme.screens, true);
+  const base = getUserPluginRules(baseRaw, config.theme.screens, true);
   /**
    * Components
    */
 
-  var components = getUserPluginRules(componentsRaw, config.theme.screens);
+  const components = getUserPluginRules(componentsRaw, config.theme.screens);
   /**
    * Utilities
    */
 
-  var utilities = getUserPluginRules(utilitiesRaw, config.theme.screens);
+  const utilities = getUserPluginRules(utilitiesRaw, config.theme.screens);
   return {
-    base: base,
-    components: components,
-    utilities: utilities
+    base,
+    components,
+    utilities
   };
 };
 
-var getPackageUsed = function (ref) {
-  var preset = ref.config.preset;
-  var cssImport = ref.cssImport;
-  var styledImport = ref.styledImport;
-
-  return ({
+const getPackageUsed = ({
+  config: {
+    preset
+  },
+  cssImport,
+  styledImport
+}) => ({
   isEmotion: preset === 'emotion' || styledImport.from.includes('emotion') || cssImport.from.includes('emotion'),
   isStyledComponents: preset === 'styled-components' || styledImport.from.includes('styled-components') || cssImport.from.includes('styled-components'),
   isGoober: preset === 'goober' || styledImport.from.includes('goober') || cssImport.from.includes('goober'),
   isStitches: preset === 'stitches' || styledImport.from.includes('stitches') || cssImport.from.includes('stitches')
 });
-};
 
-var macroTasks = [handleTwFunction, handleGlobalStylesFunction, // GlobalStyles import
+const macroTasks = [handleTwFunction, handleGlobalStylesFunction, // GlobalStyles import
 updateStyledReferences, // Styled import
 handleStyledFunction, // Convert tw.div`` & styled.div`` to styled('div', {}) (stitches)
 updateCssReferences, // Update any usage of existing css imports
@@ -13323,45 +11937,43 @@ handleScreenFunction, // Screen import
 addStyledImport, addCssImport // Gotcha: Must be after addStyledImport or issues with theme`` style transpile
 ];
 
-var twinMacro = function (ref) {
-  var t = ref.babel.types;
-  var references = ref.references;
-  var state = ref.state;
-  var config = ref.config;
-
+const twinMacro = args => {
+  const {
+    babel: {
+      types: t
+    },
+    references,
+    state,
+    config
+  } = args;
   validateImports(references);
-  var program = state.file.path;
-  var isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev' || false;
+  const program = state.file.path;
+  const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev' || false;
   state.isDev = isDev;
   state.isProd = !isDev;
-  var ref$1 = getConfigTailwindProperties(state, config);
-  var configExists = ref$1.configExists;
-  var configTailwind = ref$1.configTailwind; // Get import presets
+  const {
+    configExists,
+    configTailwind
+  } = getConfigTailwindProperties(state, config); // Get import presets
 
-  var styledImport = getStyledConfig({
-    state: state,
-    config: config
+  const styledImport = getStyledConfig({
+    state,
+    config
   });
-  var cssImport = getCssConfig({
-    state: state,
-    config: config
+  const cssImport = getCssConfig({
+    state,
+    config
   }); // Identify the css-in-js library being used
 
-  var packageUsed = getPackageUsed({
-    config: config,
-    cssImport: cssImport,
-    styledImport: styledImport
+  const packageUsed = getPackageUsed({
+    config,
+    cssImport,
+    styledImport
   });
 
-  for (var i = 0, list = Object.entries(packageUsed); i < list.length; i += 1) {
-    var ref$2 = list[i];
-    var key = ref$2[0];
-    var value = ref$2[1];
+  for (const [key, value] of Object.entries(packageUsed)) state[key] = value;
 
-    state[key] = value;
-  }
-
-  var configTwin = getConfigTwinValidated(config, state);
+  const configTwin = getConfigTwinValidated(config, state);
   state.configExists = configExists;
   state.config = configTailwind;
   state.configTwin = configTwin;
@@ -13370,7 +11982,8 @@ var twinMacro = function (ref) {
   state.tailwindConfigIdentifier = generateUid('tailwindConfig', program);
   state.tailwindUtilsIdentifier = generateUid('tailwindUtils', program);
   state.userPluginData = getUserPluginData({
-    config: state.config
+    config: state.config,
+    configTwin
   });
   isDev && Boolean(config.debugPlugins) && state.userPluginData && debugPlugins(state.userPluginData);
   state.styledImport = styledImport;
@@ -13380,76 +11993,72 @@ var twinMacro = function (ref) {
   state.cssIdentifier = null; // Group traversals together for better performance
 
   program.traverse({
-    ImportDeclaration: function ImportDeclaration(path$$1) {
+    ImportDeclaration(path) {
       setStyledIdentifier({
-        state: state,
-        path: path$$1,
-        styledImport: styledImport
+        state,
+        path,
+        styledImport
       });
       setCssIdentifier({
-        state: state,
-        path: path$$1,
-        cssImport: cssImport
+        state,
+        path,
+        cssImport
       });
     },
 
-    JSXElement: function JSXElement(path$$1) {
-      var allAttributes = path$$1.get('openingElement.attributes');
-      var jsxAttributes = allAttributes.filter(function (a) { return a.isJSXAttribute(); });
-      var ref = getCssAttributeData(jsxAttributes);
-      var index = ref.index;
-      var hasCssAttribute = ref.hasCssAttribute; // Make sure hasCssAttribute remains true once css prop has been found
+    JSXElement(path) {
+      const allAttributes = path.get('openingElement.attributes');
+      const jsxAttributes = allAttributes.filter(a => a.isJSXAttribute());
+      const {
+        index,
+        hasCssAttribute
+      } = getCssAttributeData(jsxAttributes); // Make sure hasCssAttribute remains true once css prop has been found
       // so twin can add the css prop
 
       state.hasCssAttribute = state.hasCssAttribute || hasCssAttribute; // Reverse the attributes so the items keep their order when replaced
 
-      var orderedAttributes = index > 1 ? jsxAttributes.reverse() : jsxAttributes;
+      const orderedAttributes = index > 1 ? jsxAttributes.reverse() : jsxAttributes;
 
-      for (var i = 0, list = orderedAttributes; i < list.length; i += 1) {
-        path$$1 = list[i];
-
+      for (path of orderedAttributes) {
         handleClassNameProperty({
-          path: path$$1,
-          t: t,
-          state: state
+          path,
+          t,
+          state
         });
         handleTwProperty({
-          path: path$$1,
-          t: t,
-          state: state,
-          program: program
+          path,
+          t,
+          state,
+          program
         });
         handleCsProperty({
-          path: path$$1,
-          t: t,
-          state: state
+          path,
+          t,
+          state
         });
       }
 
       hasCssAttribute && convertHtmlElementToStyled({
-        path: path$$1,
-        t: t,
-        program: program,
-        state: state
+        path,
+        t,
+        program,
+        state
       });
     }
 
   });
-  if (state.styledIdentifier === null) { state.styledIdentifier = generateUid('styled', program); }
-  if (state.cssIdentifier === null) { state.cssIdentifier = generateUid('css', program); }
+  if (state.styledIdentifier === null) state.styledIdentifier = generateUid('styled', program);
+  if (state.cssIdentifier === null) state.cssIdentifier = generateUid('css', program);
 
-  for (var i$1 = 0, list$1 = macroTasks; i$1 < list$1.length; i$1 += 1) {
-    var task = list$1[i$1];
-
+  for (const task of macroTasks) {
     task({
-      styledImport: styledImport,
-      cssImport: cssImport,
-      configTwin: configTwin,
-      references: references,
-      program: program,
-      config: config,
-      state: state,
-      t: t
+      styledImport,
+      cssImport,
+      references,
+      program,
+      config,
+      state,
+      t
     });
   }
 

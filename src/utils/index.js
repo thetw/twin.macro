@@ -1,7 +1,6 @@
 export {
   throwIf,
   isEmpty,
-  addPxTo0,
   getTheme,
   stripNegative,
   get,
@@ -13,5 +12,11 @@ export {
   isArbitraryCss,
   splitOnFirst,
   formatProp,
+  isSpaceSeparatedColor,
+  isObject,
+  getFirstValue,
+  replaceSpaceId,
+  toArray,
+  formatCssProperty,
 } from './misc'
-export { withAlpha } from './alpha'
+export { withAlpha, toAlpha, maybeAddAlpha } from './alpha'

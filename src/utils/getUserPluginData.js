@@ -1,6 +1,6 @@
 import buildPluginApi from './pluginApi'
 import deepMerge from 'lodash.merge'
-import { camelize } from './../utils'
+import { formatCssProperty } from './../utils'
 
 const stripLeadingDot = string =>
   string.startsWith('.') ? string.slice(1) : string
@@ -38,15 +38,6 @@ const parseSelector = selector => {
   return match
 }
 
-const parseRuleProperty = string => {
-  // https://stackoverflow.com/questions/448981/which-characters-are-valid-in-css-class-names-selectors
-  if (string && string.match(/^-{2,3}[_a-z]+[\w-]*/i)) {
-    return string
-  }
-
-  return camelize(string)
-}
-
 const escapeSelector = selector => selector.replace(/\\\//g, '/').trim()
 
 const buildAtSelector = (name, values, screens) => {
@@ -81,6 +72,8 @@ const getBuiltRules = (rule, { isBase }) => {
   }
 
   // Separate comma-separated selectors to allow twin's features
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
   return selector.split(',').reduce(
     (result, selector) => ({
       ...result,
@@ -92,13 +85,33 @@ const getBuiltRules = (rule, { isBase }) => {
 
 const buildDeclaration = items => {
   if (typeof items !== 'object') return items
+  // FIXME: Remove comment and fix next line
+  // eslint-disable-next-line unicorn/prefer-object-from-entries
   return Object.entries(items).reduce(
     (result, [, declaration]) => ({
       ...result,
-      [parseRuleProperty(declaration.prop)]: declaration.value,
+      [formatCssProperty(declaration.prop)]: declaration.value,
     }),
     {}
   )
+}
+
+const sortLength = (a, b) => {
+  const selectorA = a.selector ? a.selector.length : 0
+  const selectorB = b.selector ? b.selector.length : 0
+  return selectorA - selectorB
+}
+
+const sortScreenOrder = (a, b, screenOrder) => {
+  const screenIndexA = a.name === 'screen' ? screenOrder.indexOf(a.params) : 0
+  const screenIndexB = b.name === 'screen' ? screenOrder.indexOf(b.params) : 0
+  return screenIndexA - screenIndexB
+}
+
+const sortMediaRulesFirst = (a, b) => {
+  const atRuleA = a.type === 'atrule' ? 1 : 0
+  const atRuleB = b.type === 'atrule' ? 1 : 0
+  return atRuleA - atRuleB
 }
 
 const ruleSorter = (arr, screens) => {
@@ -107,33 +120,20 @@ const ruleSorter = (arr, screens) => {
   const screenOrder = screens ? Object.keys(screens) : []
 
   arr
-    // Tailwind supplies the classes reversed since 2.0.x
-    .reverse()
     // Tailwind also messes up the ordering so classes need to be resorted
     // Order selectors by length (don't know of a better way)
-    .sort((a, b) => {
-      const selectorA = a.selector ? a.selector.length : 0
-      const selectorB = b.selector ? b.selector.length : 0
-      return selectorA - selectorB
-    })
+    .sort(sortLength)
     // Place at rules at the end '@media' etc
-    .sort((a, b) => {
-      const atRuleA = a.type === 'atrule'
-      const atRuleB = b.type === 'atrule'
-      return atRuleA - atRuleB
-    })
+    .sort(sortMediaRulesFirst)
     // Sort @media by screens index
-    .sort(function (a, b) {
-      const screenIndexA =
-        a.name === 'screen' ? screenOrder.indexOf(a.params) : 0
-      const screenIndexB =
-        b.name === 'screen' ? screenOrder.indexOf(b.params) : 0
-      return screenIndexA - screenIndexB
-    })
+    .sort((a, b) => sortScreenOrder(a, b, screenOrder))
     // Traverse children and reorder aswell
+    // FIXME: Remove comment and fix next line
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(item => {
       if (!item.nodes || item.nodes.length === 0) return
-
+      // FIXME: Remove comment and fix next line
+      // eslint-disable-next-line unicorn/no-array-for-each
       item.nodes.forEach(i => {
         if (typeof i !== 'object') return
 
@@ -146,6 +146,10 @@ const ruleSorter = (arr, screens) => {
 
 const getUserPluginRules = (rules, screens, isBase) =>
   ruleSorter(rules, screens).reduce((result, rule) => {
+    if (typeof rule === 'function') {
+      return deepMerge(result, rule())
+    }
+
     if (rule.type === 'decl') {
       const builtRules = { [rule.prop]: rule.value }
       return deepMerge(result, builtRules)
@@ -154,7 +158,6 @@ const getUserPluginRules = (rules, screens, isBase) =>
     // Build the media queries
     if (rule.type !== 'atrule') {
       const builtRules = getBuiltRules(rule, { isBase })
-
       return deepMerge(result, builtRules)
     }
 
@@ -174,7 +177,7 @@ const getUserPluginRules = (rules, screens, isBase) =>
     })
   }, {})
 
-const getUserPluginData = ({ config }) => {
+const getUserPluginData = ({ config, configTwin }) => {
   if (!config.plugins || config.plugins.length === 0) {
     return
   }
@@ -182,6 +185,7 @@ const getUserPluginData = ({ config }) => {
   const context = {
     candidateRuleMap: new Map(),
     tailwindConfig: config,
+    configTwin,
   }
 
   const pluginApi = buildPluginApi(config, context)
