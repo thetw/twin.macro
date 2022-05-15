@@ -110,10 +110,10 @@ tw`text-sm md:text-lg`
 **👌 Simple imports** - Twin collapses imports from common styling libraries into a single import:
 
 ```diff
-+ import tw, { styled, css } from 'twin.macro'
-- import tw from 'twin.macro'
 - import styled from '@emotion/styled'
 - import css from '@emotion/react'
+- import tw from 'twin.macro'
++ import tw, { styled, css } from 'twin.macro'
 ```
 
 **🐹 Adds no size to your build** - Twin converts the classes you’ve used into css objects using Babel and then compiles away, leaving no runtime code
@@ -121,12 +121,15 @@ tw`text-sm md:text-lg`
 **🛎 Helpful suggestions for mistypings** - Twin chimes in with class and variant values from your Tailwind config:
 
 ```bash
-✕ ml-7 was not found
+✕ ml-1.25 was not found
 
 Try one of these classes:
-ml-0 [0] / ml-1 [0.25rem] / ml-2 [0.5rem] / ml-3 [0.75rem] / ml-4 [1rem] / ml-5 [1.25rem] / ml-6 [1.5rem]
-ml-8 [2rem] / ml-10 [2.5rem] / ml-12 [3rem] / ml-16 [4rem] / ml-20 [5rem] / ml-24 [6rem] / ml-32 [8rem]
-ml-40 [10rem] / ml-48 [12rem] / ml-56 [14rem] / ml-64 [16rem] / ml-auto [auto] / ml-px [1px]
+
+- ml-1.5 > 0.375rem
+- ml-1 > 0.25rem
+- ml-10 > 2.5rem
+- ml-11 > 2.75rem
+- ml-12 > 3rem
 ```
 
 **💡 Works with the official tailwind vscode plugin** - Avoid having to look up your classes with auto-completions straight from your Tailwind config - [See setup instructions →](https://github.com/ben-rogerson/twin.macro/discussions/227)
@@ -203,7 +206,6 @@ Twin works within many modern stacks - take a look at these examples to get star
 - **Webpack**<br/>[styled-components (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/webpack-styled-components-typescript) / [emotion (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/webpack-emotion-typescript)
 - **Preact**<br/>[styled-components](https://github.com/ben-rogerson/twin.examples/tree/master/preact-styled-components) / [emotion](https://github.com/ben-rogerson/twin.examples/tree/master/preact-emotion) / [goober](https://github.com/ben-rogerson/twin.examples/tree/master/preact-goober)
 - **Create React App**<br/>[styled-components](https://github.com/ben-rogerson/twin.examples/tree/master/cra-styled-components) / [emotion](https://github.com/ben-rogerson/twin.examples/tree/master/cra-emotion)
-- **Snowpack**<br/>[styled-components](https://github.com/ben-rogerson/twin.examples/tree/master/snowpack-react-styled-components) / [styled-components (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/snowpack-react-styled-components-typescript) / [emotion](https://github.com/ben-rogerson/twin.examples/tree/master/snowpack-react-emotion) / [emotion (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/snowpack-react-emotion-typescript)
 - **Vite**<br/>[styled-components (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/vite-styled-components-typescript) / [emotion (ts)](https://github.com/ben-rogerson/twin.examples/tree/master/vite-emotion-typescript)
 
 ### Advanced frameworks
